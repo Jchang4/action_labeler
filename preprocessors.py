@@ -1,0 +1,104 @@
+from PIL import Image
+import supervision as sv
+
+from .base import BaseImagePreprocessor
+from .helpers import get_detection
+
+
+class MaskImagePreprocessor(BaseImagePreprocessor):
+    annotator: sv.MaskAnnotator
+
+    def __init__(self, opacity: float = 0.5):
+        self.annotator = sv.MaskAnnotator(opacity=opacity)
+
+    def preprocess(
+        self, image: Image.Image, index: int, detections: sv.Detections
+    ) -> Image.Image:
+        if len(detections.xyxy) <= 1:
+            return image
+
+        single_detection = get_detection(
+            xyxy=[detections.xyxy[index]],
+            mask=[detections.mask[index]],
+        )
+        return self.annotator.annotate(
+            scene=image,
+            detections=single_detection,
+        )
+
+
+class BoxImagePreprocessor(BaseImagePreprocessor):
+    annotator: sv.BoxAnnotator
+
+    def __init__(self):
+        self.annotator = sv.BoxAnnotator()
+
+    def preprocess(
+        self, image: Image.Image, index: int, detections: sv.Detections
+    ) -> Image.Image:
+        # if len(detections.xyxy) <= 1:
+        #     return image
+
+        single_detection = get_detection(
+            xyxy=[detections.xyxy[index]],
+            mask=[detections.mask[index]],
+        )
+        return self.annotator.annotate(
+            scene=image,
+            detections=single_detection,
+        )
+
+
+class CropImagePreprocessor(BaseImagePreprocessor):
+    def preprocess(
+        self, image: Image.Image, index: int, detections: sv.Detections
+    ) -> Image.Image:
+        if len(detections.xyxy) <= 1:
+            return image
+
+        # Buffers are 5% of the image size
+        x_buffer = 0.05 * image.width
+        y_buffer = 0.05 * image.height
+
+        return image.crop(
+            (
+                max(0, int(detections.xyxy[index][0] - x_buffer)),
+                max(0, int(detections.xyxy[index][1] - y_buffer)),
+                min(image.width, int(detections.xyxy[index][2] + x_buffer)),
+                min(
+                    image.height,
+                    int(detections.xyxy[index][3] + y_buffer),
+                ),
+            )
+        )
+
+
+class ResizeImagePreprocessor(BaseImagePreprocessor):
+    def preprocess(
+        self, image: Image.Image, index: int, detections: sv.Detections
+    ) -> Image.Image:
+        image.thumbnail((1080, 1080))
+        return image
+
+
+class MinResizeImagePreprocessor(BaseImagePreprocessor):
+    def preprocess(
+        self, image: Image.Image, index: int, detections: sv.Detections
+    ) -> Image.Image:
+        if image.width < 640 or image.height < 640:
+            image.thumbnail((640, 640))
+        return image
+
+
+class MaxImageSizePreprocessor(BaseImagePreprocessor):
+    max_size: int
+
+    def __init__(self, max_size: int = 1920):
+        self.max_size = max_size
+
+    def preprocess(
+        self, image: Image.Image, index: int, detections: sv.Detections
+    ) -> Image.Image:
+        if image.width > self.max_size or image.height > self.max_size:
+            image.thumbnail((self.max_size, self.max_size))
+        return image

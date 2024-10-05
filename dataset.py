@@ -1,10 +1,12 @@
 from pathlib import Path
+from typing import Optional
 import pandas as pd
 import yaml
 import shutil
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 from PIL import Image
+import numpy as np
 
 from .preprocessors import BoxImagePreprocessor
 from .helpers import get_detection, xywh_to_xyxy, xyxy_to_mask
@@ -182,11 +184,31 @@ class Dataset:
 
         return self
 
+    def get_balanced_dataset(self, num_samples: Optional[int] = None) -> "Dataset":
+        """Get a balanced dataset with `num_samples` samples for each class"""
+        if num_samples is None:
+            num_samples = self.df["class_name"].value_counts().min()
+
+        balanced_df = (
+            self.df.groupby("class_name")
+            .apply(lambda x: x.sample(min(num_samples, len(x))))
+            .reset_index(drop=True)
+        )
+
+        # Randomly set the dataset to train or valid
+        balanced_df["dataset"] = balanced_df["dataset"].apply(
+            lambda x: "train" if np.random.rand() < 0.8 else "valid"
+        )
+
+        self.df = balanced_df
+
+        return self
+
     def plot_class_distribution(self) -> "Dataset":
         """Create two bar plots showing the class distribution in the train and valid datasets.
         Graphs are plotted vertically.
         """
-        fig, ax = plt.subplots(2, 1, figsize=(12, 12))
+        _, ax = plt.subplots(2, 1, figsize=(12, 12))
         for i, dataset in enumerate(["train", "valid"]):
             class_counts = self.df[self.df["dataset"] == dataset][
                 "class_name"

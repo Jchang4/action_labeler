@@ -7,6 +7,9 @@ import pickle
 from PIL import Image, ImageStat
 from collections import defaultdict
 import yaml
+from concurrent.futures import ProcessPoolExecutor
+from tqdm.auto import tqdm
+from typing import Callable
 
 
 def load_pickle(path: str | Path, filename: str = "classification.pickle"):
@@ -142,3 +145,32 @@ def get_image(image_path: Path) -> Image.Image:
     new_image.paste(image, (0, 0), image if image.mode == "RGBA" else None)
 
     return new_image
+
+
+def parallel(
+    f: Callable,
+    items: list,
+    *args: list,
+    n_workers=24,
+    **kwargs,
+):
+    """Applies `func` in parallel to `items`, using `n_workers`
+
+    Args:
+        f (function): function to apply
+        items (list): list of items to apply `f` to
+        n_workers (int, optional): number of workers. Defaults to 24.
+
+    Returns:
+        list: list of results
+    """
+    with ProcessPoolExecutor(max_workers=n_workers) as ex:
+        r = list(
+            tqdm(
+                ex.map(f, items, *args, **kwargs),
+                total=len(items),
+            )
+        )
+    if any([o is Exception for o in r]):
+        raise Exception(r)
+    return r

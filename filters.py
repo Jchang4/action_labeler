@@ -5,6 +5,19 @@ from .base import BaseImageFilter
 
 
 class SmallDetectionsFilter(BaseImageFilter):
+    """Filter out detections that are too small."""
+
+    min_area: float
+    min_size: int
+    size_approve: int
+
+    def __init__(
+        self, min_area: float = 0.1, min_size: int = 75, size_approve: int = 300
+    ):
+        self.min_area = min_area
+        self.min_size = min_size
+        self.size_approve = size_approve
+
     def is_valid(
         self,
         image: Image.Image,
@@ -17,9 +30,17 @@ class SmallDetectionsFilter(BaseImageFilter):
         box_height = y2 - y1
         box_area = box_width * box_height
         image_area = image.width * image.height
-        if box_area / image_area < 0.2:
+
+        # For large images, set a minimum box size
+        if box_width > self.size_approve and box_height > self.size_approve:
+            return True
+        elif box_area / image_area < self.min_area:
+            # print(f"Box area too small: {box_area} / {image_area} < {self.min_area}")
             return False
-        elif box_width < 75 or box_height < 75:
+        elif box_width < self.min_size or box_height < self.min_size:
+            # print(
+            #     f"Box size too small: {box_width} < {self.min_size} or {box_height} < {self.min_size}"
+            # )
             return False
 
         return True

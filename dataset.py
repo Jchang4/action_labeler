@@ -4,6 +4,10 @@ import yaml
 import shutil
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
+from PIL import Image
+
+from .preprocessors import BoxImagePreprocessor
+from .helpers import get_detection, xywh_to_xyxy, xyxy_to_mask
 
 
 class Dataset:
@@ -84,6 +88,8 @@ class Dataset:
             self.df.drop(columns=["image_name"], inplace=True)
             self.classes = combined_classes
 
+        self._remove_empty_classes()
+
         return self
 
     def save(self, output_folder: str | Path):
@@ -145,6 +151,8 @@ class Dataset:
         self.df["class_id"] = self.df["class_name"].map(old_to_new_class_id)
         self.classes = new_classes
 
+        self._remove_empty_classes()
+
         return self
 
     def delete_classes(self, classes: list[str]) -> "Dataset":
@@ -169,9 +177,11 @@ class Dataset:
         self.df["class_id"] = self.df["class_name"].map(old_to_new_class_id)
         self.classes = new_classes
 
+        self._remove_empty_classes()
+
         return self
 
-    def plot_class_distribution(self):
+    def plot_class_distribution(self) -> "Dataset":
         """Create two bar plots showing the class distribution in the train and valid datasets.
         Graphs are plotted vertically.
         """
@@ -188,15 +198,53 @@ class Dataset:
         plt.tight_layout()
         plt.show()
 
-    def plot_dataset(self):
+        return self
+
+    def plot_dataset(self, num_images: int = 5) -> "Dataset":
         """Plot N images for each class from the dataset with bounding boxes"""
-        raise NotImplementedError
+        box_annotator = BoxImagePreprocessor()
+
+        for class_name in self.classes:
+            class_df = self.df[self.df["class_name"] == class_name]
+            class_df = class_df.sample(min(num_images, len(class_df)))
+
+            if len(class_df) == 0:
+                print(f"No images found for class: {class_name}")
+                continue
+
+            fig, axes = plt.subplots(1, len(class_df), figsize=(12, 5))
+
+            if len(class_df) == 1:
+                axes = [axes]  # Make it iterable if there's only one image
+
+            for ax, (_, row) in zip(axes, class_df.iterrows()):
+                image = Image.open(row["image_path"])
+                image.thumbnail((480, 480))
+
+                xyxys = [xywh_to_xyxy(image, list(map(float, row["xywh"].split(" "))))]
+                masks = [xyxy_to_mask(image, xyxy) for xyxy in xyxys]
+                detections = get_detection(xyxys, masks)
+                image = box_annotator.preprocess(image, 0, detections)
+
+                ax.imshow(image)
+                ax.axis("off")
+
+            plt.suptitle(class_name)
+            plt.show()
+
+        return self
 
     def _assert_classes_exist(self, classes: list[str]):
         missing_classes = set(classes) - set(self.classes)
         assert (
             not missing_classes
         ), f"Classes do not exist in the dataset: {missing_classes}"
+
+    def _remove_empty_classes(self):
+        empty_classes = set(self.classes) - set(self.df["class_name"].unique())
+        if not empty_classes:
+            return
+        self.delete_classes(list(empty_classes))
 
 
 def _remake_dataset_dir(folder: Path):

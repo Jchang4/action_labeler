@@ -16,6 +16,7 @@ class Dataset:
 
     def __init__(self, folder: str | Path):
         self.df = self._load_df(Path(folder))
+        self._remove_empty_classes()
 
     def _load_df(self, folder: Path) -> pd.DataFrame:
         config = yaml.load((folder / "data.yaml").read_text(), Loader=yaml.FullLoader)

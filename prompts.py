@@ -9,7 +9,7 @@ class HumanActionPrompt(BasePrompt):
 
     def prompt(self) -> str:
         # prompt = "What is the person in the purple mask currently doing? \n\nChoose from the list:\n\n"
-        prompt = "Classify the person with the purple filter. For object interactions the object must be visible. Choose from the list:\n\n"
+        prompt = "Classify the person in the purple box. For object interactions the object must be visible. Choose from the list:\n\n"
 
         for action in self.actions:
             prompt += f"- {action}\n"

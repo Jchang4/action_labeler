@@ -93,7 +93,7 @@ def xywh_to_xyxy(image: Image.Image, xywh: list[float]) -> list[float]:
     return [x1, y1, x2, y2]
 
 
-def get_detection(xyxy: list[float], mask: list[float]):
+def get_detection(xyxy: list[list[float]], mask: list[list[float]]):
     return sv.Detections(
         xyxy=np.array(xyxy),
         mask=np.array(mask).astype(bool),

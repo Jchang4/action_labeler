@@ -139,10 +139,8 @@ class Dataset:
             f"Overlapping classes: {set(class_map.keys()) & set(class_map.values())}"
         )
 
-        # Remap classes
-        # Get new classes, a combination of the class_map.values and the existing classes that are not remapped
         new_classes = sorted(
-            set(class_map.values()) | (set(self.classes) - set(class_map.keys()))
+            set(self.classes) - set(class_map.keys()) | set(class_map.values())
         )
         old_to_new_class_id = {
             c: new_classes.index(class_map.get(c, c)) for c in self.classes
@@ -150,8 +148,8 @@ class Dataset:
         old_to_new_class_name = {c: class_map.get(c, c) for c in self.classes}
 
         # Update class ids
-        self.df["class_name"] = self.df["class_name"].map(old_to_new_class_name)
         self.df["class_id"] = self.df["class_name"].map(old_to_new_class_id)
+        self.df["class_name"] = self.df["class_name"].map(old_to_new_class_name)
         self.classes = new_classes
 
         self._remove_empty_classes()
@@ -184,6 +182,22 @@ class Dataset:
 
         return self
 
+    def sample_by_prefix(self, prefix: str, num_samples: int = 50) -> "Dataset":
+        """For image_paths containing the prefix, sample `num_samples` images for each class"""
+        prefix_df = self.df[self.df["image_path"].str.contains(prefix)]
+
+        # Sample `num_samples` images for each class
+        sampled_df = prefix_df.groupby("class_name").apply(
+            lambda x: x.sample(min(num_samples, len(x)))
+        )
+        # Remove prefix_df from self.df and add sampled_df back
+        self.df = self.df[~self.df["image_path"].str.contains(prefix)].reset_index(
+            drop=True
+        )
+        self.df = pd.concat([self.df, sampled_df]).reset_index(drop=True)
+
+        return self
+
     def get_balanced_dataset(self, num_samples: Optional[int] = None) -> "Dataset":
         """Get a balanced dataset with `num_samples` samples for each class"""
         if num_samples is None:
@@ -213,6 +227,10 @@ class Dataset:
             class_counts = self.df[self.df["dataset"] == dataset][
                 "class_name"
             ].value_counts()
+
+            print(f"Dataset: {dataset}")
+            print(class_counts, "\n")
+
             class_counts.plot(kind="bar", ax=ax[i])
             ax[i].set_title(f"{dataset.capitalize()} Dataset")
             ax[i].set_ylabel("Count")

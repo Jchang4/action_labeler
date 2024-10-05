@@ -17,9 +17,9 @@ class SmallDetectionsFilter(BaseImageFilter):
         box_height = y2 - y1
         box_area = box_width * box_height
         image_area = image.width * image.height
-        if box_area / image_area < 0.05:
+        if box_area / image_area < 0.2:
             return False
-        elif box_width < 50 or box_height < 50:
+        elif box_width < 75 or box_height < 75:
             return False
 
         return True

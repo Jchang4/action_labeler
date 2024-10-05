@@ -1,9 +1,9 @@
 from pathlib import Path
-from types import new_class
 import pandas as pd
 import yaml
 import shutil
 from tqdm.auto import tqdm
+import matplotlib.pyplot as plt
 
 
 class Dataset:
@@ -170,6 +170,27 @@ class Dataset:
         self.classes = new_classes
 
         return self
+
+    def plot_class_distribution(self):
+        """Create two bar plots showing the class distribution in the train and valid datasets.
+        Graphs are plotted vertically.
+        """
+        fig, ax = plt.subplots(2, 1, figsize=(12, 12))
+        for i, dataset in enumerate(["train", "valid"]):
+            class_counts = self.df[self.df["dataset"] == dataset][
+                "class_name"
+            ].value_counts()
+            class_counts.plot(kind="bar", ax=ax[i])
+            ax[i].set_title(f"{dataset.capitalize()} Dataset")
+            ax[i].set_ylabel("Count")
+            ax[i].set_xlabel("Class Name")
+            ax[i].grid(axis="y")
+        plt.tight_layout()
+        plt.show()
+
+    def plot_dataset(self):
+        """Plot N images for each class from the dataset with bounding boxes"""
+        raise NotImplementedError
 
     def _assert_classes_exist(self, classes: list[str]):
         missing_classes = set(classes) - set(self.classes)

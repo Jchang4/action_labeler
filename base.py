@@ -1,5 +1,6 @@
 from abc import abstractmethod, ABC
 from pathlib import Path
+from typing import Optional
 from PIL import Image
 import supervision as sv
 import shutil
@@ -181,11 +182,16 @@ class BaseActionLabeler(ABC):
         """Get the path to the detection file."""
         return self.detect_path / img_path.with_suffix(".txt").name
 
-    def create_dataset(self):
+    def create_dataset(self, output_folder: Optional[Path] = None):
         """Create a Yolo v8 dataset from the results."""
-        folder_name = str(self.folder).split("datasets/")[-1].split("/")
-        folder_name = "_".join(folder_name)
-        output_folder = Path("datasets") / (folder_name + "_autodistill")
+        if output_folder is None:
+            folder_name = (
+                str(self.folder).rsplit("datasets/", maxsplit=1)[-1].split("/")
+            )
+            folder_name = "_".join(folder_name)
+            output_folder = Path("datasets") / (folder_name + "_autodistill")
+
+        assert "datasets" in str(output_folder), "Output folder must be in datasets"
 
         # Create output folder
         shutil.rmtree(output_folder, ignore_errors=True)
@@ -262,3 +268,27 @@ class BaseActionLabeler(ABC):
                 for box_key, labels in box_key_to_label.items()
                 if labels
             }
+
+    ##########################
+    #### Combine Results #####
+    ##########################
+    def combine_results(
+        self,
+        results: dict[str, dict[str, list[dict[str, str]]]],
+        classes_to_keep: Optional[set[str]] = None,
+    ):
+        """Combine results."""
+        for img_path, box_key_to_label in results.items():
+            # Overwrite results with new results per image
+            self.results[img_path] = {}
+            for box_key, labels in box_key_to_label.items():
+                # Filter classes
+                if classes_to_keep is None:
+                    self.results[img_path][box_key] = labels
+                else:
+                    self.results[img_path][box_key] = [
+                        label
+                        for label in labels
+                        if label["Action"] in classes_to_keep
+                        or label["Action"].lower() in classes_to_keep
+                    ]

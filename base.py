@@ -75,9 +75,12 @@ class BaseActionLabeler(ABC):
     @abstractmethod
     def img_path_to_detections(
         self, image: Image.Image, img_path: Path
-    ) -> sv.Detections: ...
+    ) -> sv.Detections:
+        """Convert image path to detections."""
+        raise NotImplementedError()
 
     def label(self):
+        """Label images."""
         prompt = self.prompt.prompt()
         print(prompt)
 
@@ -157,23 +160,29 @@ class BaseActionLabeler(ABC):
 
     @property
     def images_path(self):
+        """Get the path to the images folder."""
         return self.folder / "images"
 
     @property
     def segment_path(self):
+        """Get the path to the segmentation folder."""
         return self.folder / "segment"
 
     @property
     def detect_path(self):
+        """Get the path to the detection folder."""
         return self.folder / "detect"
 
-    def get_segment_path(self, img_path: Path):
+    def get_segment_path(self, img_path: Path) -> Path:
+        """Get the path to the segmentation file."""
         return self.segment_path / img_path.with_suffix(".txt").name
 
-    def get_detect_path(self, img_path: Path):
+    def get_detect_path(self, img_path: Path) -> Path:
+        """Get the path to the detection file."""
         return self.detect_path / img_path.with_suffix(".txt").name
 
     def create_dataset(self):
+        """Create a Yolo v8 dataset from the results."""
         folder_name = str(self.folder).split("datasets/")[-1].split("/")
         folder_name = "_".join(folder_name)
         output_folder = Path("datasets") / (folder_name + "_autodistill")

@@ -174,7 +174,9 @@ class BaseActionLabeler(ABC):
         return self.detect_path / img_path.with_suffix(".txt").name
 
     def create_dataset(self):
-        output_folder = Path("datasets") / (str(self.folder.name) + "_autodistill")
+        folder_name = str(self.folder).split("datasets/")[-1].split("/")
+        folder_name = "_".join(folder_name)
+        output_folder = Path("datasets") / (folder_name + "_autodistill")
 
         # Create output folder
         shutil.rmtree(output_folder, ignore_errors=True)

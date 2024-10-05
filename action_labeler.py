@@ -17,6 +17,9 @@ class DetectActionLabeler(BaseActionLabeler):
         self, image: Image.Image, img_path: Path
     ) -> sv.Detections:
         txt_path = self.get_detect_path(img_path)
+        if not txt_path.exists():
+            return sv.Detections.empty()
+
         detections = [
             [float(x) for x in line.split(" ") if x]
             for line in txt_path.read_text().splitlines()

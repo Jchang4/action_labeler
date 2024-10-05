@@ -85,7 +85,7 @@ class BaseActionLabeler(ABC):
         image_paths = np.random.permutation(list(image_paths))
 
         for img_path in tqdm(image_paths, total=len(image_paths)):
-            if not img_path.exists() or not self.get_segment_path(img_path).exists():
+            if not img_path.exists():
                 continue
 
             # Raw Data - we reuse this later

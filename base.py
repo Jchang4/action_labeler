@@ -28,7 +28,7 @@ class BasePrompt(ABC):
 
 class BaseClassificationModel(ABC):
     @abstractmethod
-    def predict(self, image: Image.Image, prompt: str) -> str: ...
+    def predict(self, images: list[Image.Image], prompt: str) -> str: ...
 
 
 class BaseImageFilter(ABC):
@@ -128,7 +128,7 @@ class BaseActionLabeler(ABC):
                 # Predict
                 try:
                     raw_response = self.model.predict(
-                        annotated_frame, self.prompt.prompt()
+                        [annotated_frame], self.prompt.prompt()
                     )
                     output = parse_response(raw_response)
                     # Save Results

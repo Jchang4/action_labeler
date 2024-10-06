@@ -114,7 +114,7 @@ class Molmo7B(BaseClassificationModel):
     processor: AutoProcessor
     model: AutoModelForCausalLM
 
-    def __init__(self, load_in_4bit: bool = True):
+    def __init__(self, load_in_4bit: bool = False):
         self.processor = AutoProcessor.from_pretrained(
             "allenai/Molmo-7B-D-0924",
             trust_remote_code=True,
@@ -126,13 +126,16 @@ class Molmo7B(BaseClassificationModel):
             trust_remote_code=True,
             torch_dtype=torch.float16,
             device_map="auto",
-            # load_in_4bit=load_in_4bit,
+            load_in_4bit=load_in_4bit,
         )
 
-    def predict(self, image: Image.Image, prompt: str) -> str:
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
         with torch.autocast("cuda", enabled=True, dtype=torch.float16):
             inputs = self.processor.process(
-                images=[image.convert("RGB") if image.mode != "RGB" else image],
+                images=[
+                    image.convert("RGB") if image.mode != "RGB" else image
+                    for image in images
+                ],
                 text=prompt,
             )
 

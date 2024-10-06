@@ -50,15 +50,22 @@ class BoxImagePreprocessor(BaseImagePreprocessor):
 
 
 class CropImagePreprocessor(BaseImagePreprocessor):
+    buffer_pct: float
+    force_crop: bool
+
+    def __init__(self, buffer_pct: float = 0.05, force_crop: bool = False):
+        self.buffer_pct = buffer_pct
+        self.force_crop = force_crop
+
     def preprocess(
         self, image: Image.Image, index: int, detections: sv.Detections
     ) -> Image.Image:
-        if len(detections.xyxy) <= 1:
+        if not self.force_crop and len(detections.xyxy) <= 1:
             return image
 
-        # Buffers are 5% of the image size
-        x_buffer = 0.05 * image.width
-        y_buffer = 0.05 * image.height
+        # Add buffer to the crop
+        x_buffer = self.buffer_pct * image.width
+        y_buffer = self.buffer_pct * image.height
 
         return image.crop(
             (
@@ -82,11 +89,16 @@ class ResizeImagePreprocessor(BaseImagePreprocessor):
 
 
 class MinResizeImagePreprocessor(BaseImagePreprocessor):
+    min_size: int
+
+    def __init__(self, min_size: int = 640):
+        self.min_size = min_size
+
     def preprocess(
         self, image: Image.Image, index: int, detections: sv.Detections
     ) -> Image.Image:
-        if image.width < 640 or image.height < 640:
-            image.thumbnail((640, 640))
+        if image.width < self.min_size or image.height < self.min_size:
+            image.thumbnail((self.min_size, self.min_size))
         return image
 
 

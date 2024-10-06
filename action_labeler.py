@@ -1,6 +1,10 @@
 from pathlib import Path
 import supervision as sv
 from PIL import Image
+import json
+import numpy as np
+from tqdm.auto import tqdm
+from matplotlib import pyplot as plt
 
 from .base import BaseActionLabeler
 from .helpers import (
@@ -9,6 +13,15 @@ from .helpers import (
     get_detection,
     xywh_to_xyxy,
     xyxy_to_mask,
+    xyxy_to_xywh,
+    get_image,
+    save_pickle,
+    parse_response,
+)
+from .preprocessors import (
+    BoxImagePreprocessor,
+    CropImagePreprocessor,
+    MinResizeImagePreprocessor,
 )
 
 
@@ -58,3 +71,112 @@ class SegmentationActionLabeler(BaseActionLabeler):
         detections = get_detection(xyxys, mask)
 
         return detections
+
+
+class MultiImageDetectActionLabeler(DetectActionLabeler):
+    def label(self):
+        """Label images."""
+        prompt = self.prompt.prompt()
+        print(prompt)
+
+        image_paths = self.images_path.iterdir()
+        image_paths = np.random.permutation(list(image_paths))
+
+        for img_path in tqdm(image_paths, total=len(image_paths)):
+            if not img_path.exists():
+                continue
+
+            # Raw Data - we reuse this later
+            image = get_image(img_path)
+            detections = self.img_path_to_detections(image, img_path)
+            if detections.is_empty():
+                continue
+
+            for i in range(len(detections.xyxy)):
+                xywh = xyxy_to_xywh(image, detections.xyxy[i])
+                box_key = " ".join(map(str, xywh))
+
+                # Skip if already labeled
+                if (
+                    str(img_path) in self.results
+                    and box_key in self.results[str(img_path)]
+                ):
+                    continue
+
+                # Skip detection
+                is_valid = True
+                for filter in self.filters:
+                    if not filter.is_valid(image, i, detections):
+                        is_valid = False
+                        break
+                if not is_valid:
+                    continue
+
+                # Get Cropped Images
+                cropped_images = self.get_cropped_images(image, i, detections)
+                cropped_images = list(reversed(cropped_images))
+
+                # Predict
+                try:
+                    raw_response = self.model.predict(
+                        cropped_images, self.prompt.prompt()
+                    )
+                    output = parse_response(raw_response)
+                    # Save Results
+                    self.results[str(img_path)][box_key] = output
+                except json.JSONDecodeError:
+                    print("Error parsing response")
+                    print(raw_response)
+                    continue
+                except Exception as e:
+                    print(f"Error: {e}")
+                    continue
+
+                if self.verbose:
+                    # Show images side by side
+                    fig, axs = plt.subplots(1, len(cropped_images), figsize=(20, 5))
+                    for ax, cropped_image in zip(axs, cropped_images):
+                        ax.imshow(cropped_image)
+                        ax.axis("off")
+                    plt.show()
+                    print(output)
+
+            if len(self.results) % 50 == 0:
+                save_pickle(
+                    dict(self.results),
+                    self.folder,
+                    filename="classification.pickle",
+                )
+                print(f"Saved {len(self.results)} images")
+
+        save_pickle(
+            dict(self.results),
+            self.folder,
+            filename="classification.pickle",
+        )
+
+    def get_cropped_images(
+        self, image: Image.Image, index: int, detections: sv.Detections
+    ) -> tuple[
+        Image.Image,
+        Image.Image,
+        Image.Image,
+    ]:
+        image_with_box = BoxImagePreprocessor().preprocess(
+            image.copy(), index, detections
+        )
+        image_with_box = MinResizeImagePreprocessor(1920).preprocess(
+            image_with_box, index, detections
+        )
+
+        image_small = CropImagePreprocessor(0.0, force_crop=True).preprocess(
+            image_with_box.copy(), index, detections
+        )
+        image_medium = CropImagePreprocessor(0.25, force_crop=True).preprocess(
+            image_with_box.copy(), index, detections
+        )
+        image_large = CropImagePreprocessor(0.5, force_crop=True).preprocess(
+            image_with_box.copy(), index, detections
+        )
+
+        return image_small, image_medium, image_large

@@ -34,13 +34,15 @@ class SmallDetectionsFilter(BaseImageFilter):
         # For large images, set a minimum box size
         if box_width > self.size_approve and box_height > self.size_approve:
             return True
-        elif box_area / image_area < self.min_area:
-            # print(f"Box area too small: {box_area} / {image_area} < {self.min_area}")
-            return False
         elif box_width < self.min_size or box_height < self.min_size:
-            # print(
-            #     f"Box size too small: {box_width} < {self.min_size} or {box_height} < {self.min_size}"
-            # )
+            print(
+                f"Box size too small: {int(box_width)} < {self.min_size} or {int(box_height)} < {self.min_size}"
+            )
+            return False
+        elif box_area / image_area < self.min_area:
+            print(
+                f"Box area too small ({int(box_width)} x {int(box_height)}): {int(box_area)} / {image_area} < {self.min_area}"
+            )
             return False
 
         return True

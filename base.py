@@ -153,6 +153,7 @@ class BaseActionLabeler(ABC):
                 )
                 print(f"Saved {len(self.results)} images")
 
+        self.remove_invalid_classes()
         save_pickle(
             dict(self.results),
             self.folder,
@@ -231,9 +232,6 @@ class BaseActionLabeler(ABC):
                 with open(txt_path, "a") as f:
                     f.write(f"{action_index} {box_key}\n")
 
-    ##########################
-    #### Edit Results ########
-    ##########################
     def get_classes(self) -> set[str]:
         """Get classes from the results."""
         result_classes = set()
@@ -253,6 +251,10 @@ class BaseActionLabeler(ABC):
 
         return pd.DataFrame(class_counts.items(), columns=["Action", "Count"])
 
+    ##########################
+    #### Edit Results ########
+    ##########################
+
     def remove_classes(self, classes: set[str]):
         """Remove classes from the results."""
         for img_path, box_key_to_label in self.results.items():
@@ -268,6 +270,18 @@ class BaseActionLabeler(ABC):
                 for box_key, labels in box_key_to_label.items()
                 if labels
             }
+
+    def remove_invalid_classes(self):
+        """Remove invalid classes from the results."""
+        valid_classes = self.prompt.actions
+        all_classes = set()
+
+        for _, box_key_to_label in self.results.items():
+            for _, labels in box_key_to_label.items():
+                all_classes.update([label["Action"] for label in labels])
+
+        invalid_classes = all_classes - set(valid_classes)
+        self.remove_classes(invalid_classes)
 
     ##########################
     #### Combine Results #####

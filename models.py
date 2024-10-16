@@ -1,3 +1,4 @@
+from typing import Any
 from PIL import Image
 import torch
 from transformers import (
@@ -55,59 +56,6 @@ class LlavaOnevision7B(BaseClassificationModel):
         output = self.model.generate(**inputs, max_new_tokens=500, do_sample=False)
         response = self.processor.decode(output[0][2:], skip_special_tokens=True)
         return response.split("assistant")[1]
-
-
-class Ovis10B(BaseClassificationModel):
-    model: AutoModelForCausalLM
-
-    def __init__(self):
-        self.model = AutoModelForCausalLM.from_pretrained(
-            "AIDC-AI/Ovis1.6-Gemma2-9B",
-            torch_dtype=torch.bfloat16,
-            multimodal_max_length=8192,
-            trust_remote_code=True,
-            load_in_4bit=True,
-        ).to(0)
-
-    def predict(self, image: Image.Image, prompt: str) -> str:
-        text_tokenizer = self.model.get_text_tokenizer()
-        visual_tokenizer = self.model.get_visual_tokenizer()
-
-        # enter image path and prompt
-        query = f"<image>\n{prompt}"
-
-        # format conversation
-        prompt, input_ids, pixel_values = self.model.preprocess_inputs(query, [image])
-        attention_mask = torch.ne(input_ids, text_tokenizer.pad_token_id)
-        input_ids = input_ids.unsqueeze(0).to(device=self.model.device)
-        attention_mask = attention_mask.unsqueeze(0).to(device=self.model.device)
-        pixel_values = [
-            pixel_values.to(
-                dtype=visual_tokenizer.dtype, device=visual_tokenizer.device
-            )
-        ]
-
-        # generate output
-        with torch.inference_mode():
-            gen_kwargs = dict(
-                max_new_tokens=1024,
-                do_sample=False,
-                top_p=None,
-                top_k=None,
-                temperature=None,
-                repetition_penalty=None,
-                eos_token_id=self.model.generation_config.eos_token_id,
-                pad_token_id=text_tokenizer.pad_token_id,
-                use_cache=True,
-            )
-            output_ids = self.model.generate(
-                input_ids,
-                pixel_values=pixel_values,
-                attention_mask=attention_mask,
-                **gen_kwargs,
-            )[0]
-            output = text_tokenizer.decode(output_ids, skip_special_tokens=True)
-            return output
 
 
 class Molmo7B(BaseClassificationModel):
@@ -173,11 +121,12 @@ class Pixtral12B(BaseClassificationModel):
         )
         self.processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 
-    def predict(self, image: Image, prompt: str) -> str:
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
         # with torch.autocast("cuda", enabled=True, dtype=torch.float16):
-        PROMPT = f"<s>[INST]{prompt}\n[IMG][/INST]"
+        images_query = "".join(["[IMG]"] * len(images))
+        PROMPT = f"<s>[INST]{prompt}\n{images_query}[/INST]"
 
-        inputs = self.processor(text=PROMPT, images=[image], return_tensors="pt").to(
+        inputs = self.processor(text=PROMPT, images=images, return_tensors="pt").to(
             "cuda"
         )
         generate_ids = self.model.generate(**inputs, max_new_tokens=500)
@@ -187,3 +136,66 @@ class Pixtral12B(BaseClassificationModel):
             clean_up_tokenization_spaces=False,
         )[0]
         return output.replace(prompt, "").strip()
+
+
+class Ovis9B(BaseClassificationModel):
+    model: AutoModelForCausalLM
+    text_tokenizer: Any
+    visual_tokenizer: Any
+
+    def __init__(self) -> None:
+        # load model
+        model = AutoModelForCausalLM.from_pretrained(
+            "AIDC-AI/Ovis1.6-Gemma2-9B",
+            torch_dtype=torch.bfloat16,
+            multimodal_max_length=8192,
+            trust_remote_code=True,
+        ).cuda()
+        text_tokenizer = model.get_text_tokenizer()
+        visual_tokenizer = model.get_visual_tokenizer()
+
+        self.model = model
+        self.text_tokenizer = text_tokenizer
+        self.visual_tokenizer = visual_tokenizer
+
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
+        # enter image path and prompt
+        # images = [images[1]]
+        text = prompt
+        images_query = " ".join(["<image>"] * len(images))
+        query = f"{images_query}\n{text}"
+
+        # format conversation
+        prompt, input_ids, pixel_values = self.model.preprocess_inputs(query, images)
+        attention_mask = torch.ne(input_ids, self.text_tokenizer.pad_token_id)
+        input_ids = input_ids.unsqueeze(0).to(device=self.model.device)
+        attention_mask = attention_mask.unsqueeze(0).to(device=self.model.device)
+        pixel_values = [
+            pixel_values.to(
+                dtype=self.visual_tokenizer.dtype, device=self.visual_tokenizer.device
+            )
+        ]
+
+        # generate output
+        with torch.inference_mode():
+            gen_kwargs = dict(
+                max_new_tokens=1024,
+                do_sample=False,
+                top_p=None,
+                top_k=None,
+                temperature=None,
+                repetition_penalty=None,
+                eos_token_id=self.model.generation_config.eos_token_id,
+                pad_token_id=self.text_tokenizer.pad_token_id,
+                use_cache=True,
+            )
+            llm = self.model.get_llm()
+            llm._cache = None
+            output_ids = self.model.generate(
+                input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                **gen_kwargs,
+            )[0]
+            output = self.text_tokenizer.decode(output_ids, skip_special_tokens=True)
+            return output

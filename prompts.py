@@ -1,5 +1,19 @@
 from .base import BasePrompt
 
+SINGLE_IMAGE_PROMPT = """Classify the action of the person in the **purple box**. \
+For object interactions the object must be visible.
+
+Choose from the list:
+
+{actions}
+
+Respond with a JSON object with the following format:
+{{
+    "Description": describe the person you're classifying
+    "Action": the action the person is performing, must be exact text from the list
+    "Confidence": confidence in the prediction
+}}"""
+
 
 class HumanActionPrompt(BasePrompt):
     actions: list[str]
@@ -8,17 +22,13 @@ class HumanActionPrompt(BasePrompt):
         self.actions = actions
 
     def prompt(self) -> str:
-        # prompt = "What is the person in the purple mask currently doing? \n\nChoose from the list:\n\n"
-        prompt = "Classify the person in the purple box. For object interactions the object must be visible. Choose from the list:\n\n"
-
-        for action in self.actions:
-            prompt += f"- {action}\n"
-
-        prompt += f"- None of the above\n\n"
-
-        prompt += 'Respond with a valid JSON object:\n{\n    "Description": "describe the person",\n    "Action": "chosen action",\n    "Confidence": confidence score (0 to 1)\n}'
-
-        return prompt
+        return (
+            SINGLE_IMAGE_PROMPT.format(
+                actions="\n".join(f'- "{action}"' for action in self.actions)
+            )
+            .strip()
+            .strip("\n")
+        )
 
 
 MULTI_IMAGE_PROMPT = """
@@ -37,7 +47,7 @@ Choose from the list:
 Respond with a JSON object with the following format:
 {{
     "Description": describe the person you're classifying
-    "Action": the action the person is performing
+    "Action": the action the person is performing, must be exact text from the list
     "Confidence": confidence in the prediction
 }}
 """
@@ -52,7 +62,7 @@ class MultiImageHumanActionPrompt(BasePrompt):
     def prompt(self) -> str:
         return (
             MULTI_IMAGE_PROMPT.format(
-                actions="\n".join(f"- {action}" for action in self.actions)
+                actions="\n".join(f'- "{action}"' for action in self.actions)
             )
             .strip()
             .strip("\n")

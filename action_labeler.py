@@ -103,18 +103,22 @@ class MultiImageDetectActionLabeler(DetectActionLabeler):
                 ):
                     continue
 
-                # Skip detection
-                is_valid = True
-                for filter in self.filters:
-                    if not filter.is_valid(image, i, detections):
-                        is_valid = False
-                        break
-                if not is_valid:
-                    continue
+                try:
+                    # Skip detection
+                    is_valid = True
+                    for filter in self.filters:
+                        if not filter.is_valid(image, i, detections):
+                            is_valid = False
+                            break
+                    if not is_valid:
+                        continue
 
-                # Get Cropped Images
-                cropped_images = self.get_cropped_images(image, i, detections)
-                cropped_images = list(reversed(cropped_images))
+                    # Get Cropped Images
+                    cropped_images = self.get_cropped_images(image, i, detections)
+                    cropped_images = list(reversed(cropped_images))
+                except Exception as e:
+                    print(f"Error: {e}")
+                    continue
 
                 # Predict
                 try:
@@ -149,6 +153,7 @@ class MultiImageDetectActionLabeler(DetectActionLabeler):
                 )
                 print(f"Saved {len(self.results)} images")
 
+        self.remove_invalid_classes()
         save_pickle(
             dict(self.results),
             self.folder,

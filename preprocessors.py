@@ -64,8 +64,10 @@ class CropImagePreprocessor(BaseImagePreprocessor):
             return image
 
         # Add buffer to the crop
-        x_buffer = self.buffer_pct * image.width
-        y_buffer = self.buffer_pct * image.height
+        box_width = detections.xyxy[index][2] - detections.xyxy[index][0]
+        box_height = detections.xyxy[index][3] - detections.xyxy[index][1]
+        x_buffer = self.buffer_pct * box_width
+        y_buffer = self.buffer_pct * box_height
 
         return image.crop(
             (

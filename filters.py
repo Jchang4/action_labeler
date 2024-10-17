@@ -4,18 +4,31 @@ import supervision as sv
 from .base import BaseImageFilter
 
 
+class MinImageSizeFilter(BaseImageFilter):
+    """Filter out images that are too small."""
+
+    min_size: int
+
+    def __init__(self, min_size: int):
+        self.min_size = min_size
+
+    def is_valid(
+        self,
+        image: Image.Image,
+        index: int,
+        detections: sv.Detections,
+    ) -> bool:
+        return image.width >= self.min_size and image.height >= self.min_size
+
+
 class SmallDetectionsFilter(BaseImageFilter):
     """Filter out detections that are too small."""
 
     min_area: float
-    min_size: int
     size_approve: int
 
-    def __init__(
-        self, min_area: float = 0.1, min_size: int = 75, size_approve: int = 300
-    ):
+    def __init__(self, min_area: float = 0.1, size_approve: int = 300):
         self.min_area = min_area
-        self.min_size = min_size
         self.size_approve = size_approve
 
     def is_valid(
@@ -31,15 +44,11 @@ class SmallDetectionsFilter(BaseImageFilter):
         box_area = box_width * box_height
         image_area = image.width * image.height
 
-        # For large images, set a minimum box size
-        if box_width > self.size_approve and box_height > self.size_approve:
+        # For detections in very large images, we approve
+        # detections that are larger than size_approve
+        if box_width > self.size_approve or box_height > self.size_approve:
             return True
-        # elif box_width < self.min_size or box_height < self.min_size:
-        #     print(
-        #         f"Box size too small: {int(box_width)} < {self.min_size} or {int(box_height)} < {self.min_size}"
-        #     )
-        #     return False
-        if box_area / image_area < self.min_area:
+        elif box_area / image_area < self.min_area:
             print(
                 f"Box area too small ({int(box_width)} x {int(box_height)}): {int(box_area)} / {image_area} = {(box_area/image_area):.2f} < {self.min_area}"
             )

@@ -11,7 +11,7 @@ Respond with a JSON object with the following format:
 {{
     "Description": describe the person you're classifying
     "Action": the action the person is performing, must be exact text from the list
-    "Confidence": confidence in the prediction
+    "Confidence": confidence in the prediction from 0 to 1. Use a low confidence if you're unsure. Use a high confidence if you're confident.
 }}"""
 
 
@@ -48,7 +48,7 @@ Respond with a JSON object with the following format:
 {{
     "Description": describe the person you're classifying
     "Action": the action the person is performing, must be exact text from the list
-    "Confidence": confidence in the prediction
+    "Confidence": confidence in the prediction from 0 to 1. Use a low confidence if you're unsure. Use a high confidence if you're confident.
 }}
 """
 

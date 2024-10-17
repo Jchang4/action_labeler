@@ -1,15 +1,17 @@
 import json
-import numpy as np
-from pathlib import Path
-import supervision as sv
-from ultralytics.utils.ops import segment2box
 import pickle
-from PIL import Image, ImageStat
+import re
 from collections import defaultdict
-import yaml
 from concurrent.futures import ProcessPoolExecutor
-from tqdm.auto import tqdm
+from pathlib import Path
 from typing import Callable
+
+import numpy as np
+import supervision as sv
+import yaml
+from PIL import Image, ImageStat
+from tqdm.auto import tqdm
+from ultralytics.utils.ops import segment2box
 
 
 def load_pickle(path: str | Path, filename: str = "classification.pickle"):
@@ -102,16 +104,19 @@ def get_detection(xyxy: list[list[float]], mask: list[list[float]]):
 
 
 def parse_response(response: str) -> list[dict[str, str | float]]:
-    # Remove the triple backticks and 'json' string from the response
-    if "```json" in response:
-        cleaned_response = response.split("```json")[1].split("```")[0]
+    # Regular expression to match JSON objects or arrays in the text
+    json_match = re.search(r"(\{.*?\}|\[.*?\])", response, re.DOTALL)
+
+    if json_match:
+        cleaned_response = json_match.group(1)  # Extract the matched JSON part
+        try:
+            # Parse the cleaned response as JSON
+            parsed_json = json.loads(cleaned_response)
+            return [parsed_json] if isinstance(parsed_json, dict) else parsed_json
+        except json.JSONDecodeError:
+            raise ValueError(f"Found JSON but couldn't parse it: {cleaned_response}")
     else:
-        cleaned_response = response
-
-    # Parse the cleaned response as JSON
-    parsed_json = json.loads(cleaned_response)
-
-    return [parsed_json]
+        raise ValueError(f"No JSON found in the response: {response}")
 
 
 def create_dataset_yaml(path: Path, classes: list[str]):

@@ -1,5 +1,5 @@
-from PIL import Image
 import supervision as sv
+from PIL import Image
 
 from .base import BaseImagePreprocessor
 from .helpers import get_detection
@@ -29,9 +29,11 @@ class MaskImagePreprocessor(BaseImagePreprocessor):
 
 class BoxImagePreprocessor(BaseImagePreprocessor):
     annotator: sv.BoxAnnotator
+    buffer_px: int
 
-    def __init__(self):
+    def __init__(self, buffer_px: int = 4):
         self.annotator = sv.BoxAnnotator()
+        self.buffer_px = buffer_px
 
     def preprocess(
         self, image: Image.Image, index: int, detections: sv.Detections
@@ -40,7 +42,7 @@ class BoxImagePreprocessor(BaseImagePreprocessor):
         #     return image
 
         single_detection = get_detection(
-            xyxy=[detections.xyxy[index]],
+            xyxy=[detections.xyxy[index] + self.buffer_px],
             mask=[detections.mask[index]],
         )
         return self.annotator.annotate(

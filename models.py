@@ -1,61 +1,19 @@
 from typing import Any
-from PIL import Image
+
+import requests
 import torch
+from PIL import Image
 from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
+    BitsAndBytesConfig,
     GenerationConfig,
-    AutoProcessor,
     LlavaForConditionalGeneration,
     LlavaOnevisionForConditionalGeneration,
-    BitsAndBytesConfig,
+    MllamaForConditionalGeneration,
 )
 
 from .base import BaseClassificationModel
-
-
-class LlavaOnevision7B(BaseClassificationModel):
-    processor: AutoProcessor
-    model: LlavaOnevisionForConditionalGeneration
-
-    def __init__(self, load_in_4bit: bool = True):
-        self.load_in_4bit = load_in_4bit
-        # model_id = "llava-hf/llava-onevision-qwen2-7b-si-hf"  # Single image
-        model_id = "llava-hf/llava-onevision-qwen2-7b-ov-chat-hf"  # image-text interleaved input and video input
-        self.processor = AutoProcessor.from_pretrained(model_id)
-        self.model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            model_id,
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-            use_flash_attention_2=True,
-            quantization_config=BitsAndBytesConfig(
-                load_in_4bit=load_in_4bit,
-                bnb_4bit_compute_dtype=torch.float16,
-            ),
-        ).to(0)
-
-    def predict(self, image: Image.Image, prompt: str) -> str:
-        # Define a chat history and use `apply_chat_template` to get correctly formatted prompt
-        # Each value in "content" has to be a list of dicts with types ("text", "image")
-        conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image"},
-                ],
-            },
-        ]
-        prompt = self.processor.apply_chat_template(
-            conversation, add_generation_prompt=True
-        )
-        inputs = self.processor(images=image, text=prompt, return_tensors="pt").to(
-            0, torch.float16
-        )
-
-        output = self.model.generate(**inputs, max_new_tokens=500, do_sample=False)
-        response = self.processor.decode(output[0][2:], skip_special_tokens=True)
-        return response.split("assistant")[1]
 
 
 class Molmo7B(BaseClassificationModel):
@@ -87,10 +45,15 @@ class Molmo7B(BaseClassificationModel):
                 text=prompt,
             )
 
+            # TODO: average the image embeddings into one if there are multiple
+            print(inputs.keys())
+
             # move inputs to the correct device and make a batch of size 1
             inputs = {
                 k: v.to(self.model.device).unsqueeze(0) for k, v in inputs.items()
             }
+
+            print(inputs.keys())
 
             # generate output; maximum 200 new tokens; stop generation when <|endoftext|> is generated
             output = self.model.generate_from_batch(
@@ -106,36 +69,6 @@ class Molmo7B(BaseClassificationModel):
             )
 
             return generated_text
-
-
-class Pixtral12B(BaseClassificationModel):
-    model: LlavaForConditionalGeneration
-    processor: AutoProcessor
-
-    def __init__(self) -> None:
-        model_id = "mistral-community/pixtral-12b"
-        self.model = LlavaForConditionalGeneration.from_pretrained(
-            model_id,
-            device_map="auto",
-            load_in_4bit=True,
-        )
-        self.processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
-
-    def predict(self, images: list[Image.Image], prompt: str) -> str:
-        # with torch.autocast("cuda", enabled=True, dtype=torch.float16):
-        images_query = "".join(["[IMG]"] * len(images))
-        PROMPT = f"<s>[INST]{prompt}\n{images_query}[/INST]"
-
-        inputs = self.processor(text=PROMPT, images=images, return_tensors="pt").to(
-            "cuda"
-        )
-        generate_ids = self.model.generate(**inputs, max_new_tokens=500)
-        output = self.processor.batch_decode(
-            generate_ids,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=False,
-        )[0]
-        return output.replace(prompt, "").strip()
 
 
 class Ovis9B(BaseClassificationModel):
@@ -199,3 +132,117 @@ class Ovis9B(BaseClassificationModel):
             )[0]
             output = self.text_tokenizer.decode(output_ids, skip_special_tokens=True)
             return output
+
+
+class LlavaOnevision7B(BaseClassificationModel):
+    processor: AutoProcessor
+    model: LlavaOnevisionForConditionalGeneration
+
+    def __init__(self, load_in_4bit: bool = True):
+        self.load_in_4bit = load_in_4bit
+        # model_id = "llava-hf/llava-onevision-qwen2-7b-si-hf"  # Single image
+        model_id = "llava-hf/llava-onevision-qwen2-7b-ov-chat-hf"  # image-text interleaved input and video input
+        self.processor = AutoProcessor.from_pretrained(model_id)
+        self.model = LlavaOnevisionForConditionalGeneration.from_pretrained(
+            model_id,
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
+            use_flash_attention_2=True,
+            quantization_config=BitsAndBytesConfig(
+                load_in_4bit=load_in_4bit,
+                bnb_4bit_compute_dtype=torch.float16,
+            ),
+        ).to(0)
+
+    def predict(self, image: Image.Image, prompt: str) -> str:
+        # Define a chat history and use `apply_chat_template` to get correctly formatted prompt
+        # Each value in "content" has to be a list of dicts with types ("text", "image")
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image"},
+                ],
+            },
+        ]
+        prompt = self.processor.apply_chat_template(
+            conversation, add_generation_prompt=True
+        )
+        inputs = self.processor(images=image, text=prompt, return_tensors="pt").to(
+            0, torch.float16
+        )
+
+        output = self.model.generate(**inputs, max_new_tokens=500, do_sample=False)
+        response = self.processor.decode(output[0][2:], skip_special_tokens=True)
+        return response.split("assistant")[1]
+
+
+class Llama11BVisionInstruct(BaseClassificationModel):
+    model: MllamaForConditionalGeneration
+    processor: AutoProcessor
+
+    def __init__(self, load_in_4bit: bool = True):
+        model_id = "meta-llama/Llama-3.2-11B-Vision-Instruct"
+
+        self.model = MllamaForConditionalGeneration.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            load_in_4bit=load_in_4bit,
+        )
+        self.processor = AutoProcessor.from_pretrained(model_id)
+
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
+        image = images[0] if len(images) == 1 else images[1]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {
+                        "type": "text",
+                        "text": "If I had to write a haiku for this one, it would be: ",
+                    },
+                ],
+            }
+        ]
+        input_text = self.processor.apply_chat_template(
+            messages, add_generation_prompt=True
+        )
+        inputs = self.processor(
+            image, input_text, add_special_tokens=False, return_tensors="pt"
+        ).to(self.model.device)
+
+        output = self.model.generate(**inputs, max_new_tokens=30)
+        return self.processor.decode(output[0])
+
+
+# class Pixtral12B(BaseClassificationModel):
+#     model: LlavaForConditionalGeneration
+#     processor: AutoProcessor
+
+#     def __init__(self) -> None:
+#         model_id = "mistral-community/pixtral-12b"
+#         self.model = LlavaForConditionalGeneration.from_pretrained(
+#             model_id,
+#             device_map="auto",
+#             load_in_4bit=True,
+#         )
+#         self.processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
+
+#     def predict(self, images: list[Image.Image], prompt: str) -> str:
+#         # with torch.autocast("cuda", enabled=True, dtype=torch.float16):
+#         images_query = "".join(["[IMG]"] * len(images))
+#         PROMPT = f"<s>[INST]{prompt}\n{images_query}[/INST]"
+
+#         inputs = self.processor(text=PROMPT, images=images, return_tensors="pt").to(
+#             "cuda"
+#         )
+#         generate_ids = self.model.generate(**inputs, max_new_tokens=500)
+#         output = self.processor.batch_decode(
+#             generate_ids,
+#             skip_special_tokens=True,
+#             clean_up_tokenization_spaces=False,
+#         )[0]
+#         return output.replace(prompt, "").strip()

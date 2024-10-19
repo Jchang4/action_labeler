@@ -1,22 +1,23 @@
-from pathlib import Path
-import supervision as sv
-from PIL import Image
 import json
+from pathlib import Path
+
 import numpy as np
-from tqdm.auto import tqdm
+import supervision as sv
 from matplotlib import pyplot as plt
+from PIL import Image
+from tqdm.auto import tqdm
 
 from .base import BaseActionLabeler
 from .helpers import (
-    segmentation_to_xyxy,
-    segmentation_to_mask,
     get_detection,
+    get_image,
+    parse_response,
+    save_pickle,
+    segmentation_to_mask,
+    segmentation_to_xyxy,
     xywh_to_xyxy,
     xyxy_to_mask,
     xyxy_to_xywh,
-    get_image,
-    save_pickle,
-    parse_response,
 )
 from .preprocessors import (
     BoxImagePreprocessor,
@@ -56,6 +57,9 @@ class SegmentationActionLabeler(BaseActionLabeler):
         self, image: Image.Image, img_path: Path
     ) -> sv.Detections:
         txt_path = self.get_segment_path(img_path)
+        if not txt_path.exists():
+            return sv.Detections.empty()
+
         segmentations = [
             [float(x) for x in line.split(" ") if x]
             for line in txt_path.read_text().splitlines()

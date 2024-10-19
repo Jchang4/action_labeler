@@ -14,12 +14,33 @@ class MaskImagePreprocessor(BaseImagePreprocessor):
     def preprocess(
         self, image: Image.Image, index: int, detections: sv.Detections
     ) -> Image.Image:
-        if len(detections.xyxy) <= 1:
-            return image
+        # if len(detections.xyxy) <= 1:
+        #     return image
 
         single_detection = get_detection(
             xyxy=[detections.xyxy[index]],
             mask=[detections.mask[index]],
+        )
+        return self.annotator.annotate(
+            scene=image,
+            detections=single_detection,
+        )
+
+
+class NonIndexMaskImagePreprocessor(BaseImagePreprocessor):
+    """Only show the index mask. Black out all other content."""
+
+    annotator: sv.MaskAnnotator
+
+    def __init__(self, opacity: float = 0.9, color: sv.Color = sv.Color.BLACK):
+        self.annotator = sv.MaskAnnotator(opacity=opacity, color=color)
+
+    def preprocess(
+        self, image: Image.Image, index: int, detections: sv.Detections
+    ) -> Image.Image:
+        single_detection = get_detection(
+            xyxy=[detections.xyxy[index]],
+            mask=[~detections.mask[index].astype(bool)],
         )
         return self.annotator.annotate(
             scene=image,
@@ -42,7 +63,10 @@ class BoxImagePreprocessor(BaseImagePreprocessor):
         #     return image
 
         single_detection = get_detection(
-            xyxy=[detections.xyxy[index] + self.buffer_px],
+            xyxy=[
+                detections.xyxy[index]
+                + [-self.buffer_px, -self.buffer_px, self.buffer_px, self.buffer_px]
+            ],
             mask=[detections.mask[index]],
         )
         return self.annotator.annotate(

@@ -4,6 +4,30 @@ import supervision as sv
 from .base import BaseImageFilter
 
 
+class SingleDetectionFilter(BaseImageFilter):
+    """Filter out images that have more than one detection."""
+
+    def is_valid(
+        self,
+        image: Image.Image,
+        index: int,
+        detections: sv.Detections,
+    ) -> bool:
+        return len(detections.xyxy) == 1
+
+
+class MultipleDetectionsFilter(BaseImageFilter):
+    """Filter out images that have only one detection."""
+
+    def is_valid(
+        self,
+        image: Image.Image,
+        index: int,
+        detections: sv.Detections,
+    ) -> bool:
+        return len(detections.xyxy) > 1
+
+
 class MinImageSizeFilter(BaseImageFilter):
     """Filter out images that are too small."""
 

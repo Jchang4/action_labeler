@@ -93,13 +93,12 @@ class Ovis9B(BaseClassificationModel):
 
     def predict(self, images: list[Image.Image], prompt: str) -> str:
         # enter image path and prompt
-        # images = [images[1]]
+        image = images[0] if len(images) == 1 else images[1]
         text = prompt
-        images_query = " ".join(["<image>"] * len(images))
-        query = f"{images_query}\n{text}"
+        query = f"<image>\n{text}"
 
         # format conversation
-        prompt, input_ids, pixel_values = self.model.preprocess_inputs(query, images)
+        prompt, input_ids, pixel_values = self.model.preprocess_inputs(query, [image])
         attention_mask = torch.ne(input_ids, self.text_tokenizer.pad_token_id)
         input_ids = input_ids.unsqueeze(0).to(device=self.model.device)
         attention_mask = attention_mask.unsqueeze(0).to(device=self.model.device)

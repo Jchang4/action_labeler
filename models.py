@@ -75,6 +75,7 @@ class Ovis9B(BaseClassificationModel):
     model: AutoModelForCausalLM
     text_tokenizer: Any
     visual_tokenizer: Any
+    llm: Any
 
     def __init__(self) -> None:
         # load model
@@ -90,6 +91,7 @@ class Ovis9B(BaseClassificationModel):
         self.model = model
         self.text_tokenizer = text_tokenizer
         self.visual_tokenizer = visual_tokenizer
+        self.llm = self.model.get_llm()
 
     def predict(self, images: list[Image.Image], prompt: str) -> str:
         # enter image path and prompt
@@ -121,8 +123,7 @@ class Ovis9B(BaseClassificationModel):
                 pad_token_id=self.text_tokenizer.pad_token_id,
                 use_cache=True,
             )
-            llm = self.model.get_llm()
-            llm._cache = None
+            self.llm._cache = None
             output_ids = self.model.generate(
                 input_ids,
                 pixel_values=pixel_values,

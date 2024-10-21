@@ -109,10 +109,15 @@ class CropImagePreprocessor(BaseImagePreprocessor):
 
 
 class ResizeImagePreprocessor(BaseImagePreprocessor):
+    size: int
+
+    def __init__(self, size: int = 1080):
+        self.size = size
+
     def preprocess(
         self, image: Image.Image, index: int, detections: sv.Detections
     ) -> Image.Image:
-        image.thumbnail((1080, 1080))
+        image.thumbnail((self.size, self.size))
         return image
 
 

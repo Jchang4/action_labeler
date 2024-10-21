@@ -1,21 +1,22 @@
-from abc import abstractmethod, ABC
+import json
+import shutil
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
-from PIL import Image
-import supervision as sv
-import shutil
-import json
+
 import numpy as np
 import pandas as pd
+import supervision as sv
+from PIL import Image
 from tqdm.auto import tqdm
 
 from .helpers import (
-    load_pickle,
-    get_image,
     create_dataset_yaml,
-    xyxy_to_xywh,
+    get_image,
+    load_pickle,
     parse_response,
     save_pickle,
+    xyxy_to_xywh,
 )
 
 
@@ -54,6 +55,7 @@ class BaseActionLabeler(ABC):
     results: dict[str, dict[str, list[dict[str, str]]]]
 
     verbose: bool = False
+    save_every: int = 50
 
     def __init__(
         self,
@@ -63,6 +65,7 @@ class BaseActionLabeler(ABC):
         filters: list[BaseImageFilter],
         preprocessors: list[BaseImagePreprocessor],
         verbose: bool = False,
+        save_every: int = 50,
     ):
         self.folder = folder
         self.prompt = prompt
@@ -72,6 +75,7 @@ class BaseActionLabeler(ABC):
         self.results = load_pickle(folder, filename="classification.pickle")
 
         self.verbose = verbose
+        self.save_every = save_every
 
     @abstractmethod
     def img_path_to_detections(
@@ -82,11 +86,14 @@ class BaseActionLabeler(ABC):
 
     def label(self):
         """Label images."""
+        print(f"Starting with {len(self.results)} images")
+
         prompt = self.prompt.prompt()
         print(prompt)
 
         image_paths = self.images_path.iterdir()
-        image_paths = np.random.permutation(list(image_paths))
+        # image_paths = np.random.permutation(list(image_paths))
+        image_paths = sorted(image_paths)
 
         for img_path in tqdm(image_paths, total=len(image_paths)):
             if not img_path.exists():
@@ -133,6 +140,7 @@ class BaseActionLabeler(ABC):
                     output = parse_response(raw_response)
                     # Save Results
                     self.results[str(img_path)][box_key] = output
+
                 except json.JSONDecodeError:
                     print("Error parsing response")
                     print(raw_response)
@@ -145,7 +153,7 @@ class BaseActionLabeler(ABC):
                     annotated_frame.show()
                     print(output)
 
-            if len(self.results) % 50 == 0:
+            if len(self.results) % self.save_every == 0:
                 save_pickle(
                     dict(self.results),
                     self.folder,
@@ -208,6 +216,11 @@ class BaseActionLabeler(ABC):
         for img_path, box_key_to_label in self.results.items():
             img_path = Path(img_path)
             dataset = "train" if np.random.rand() < 0.8 else "valid"
+
+            if not img_path.exists():
+                print(f"Skipping non-existent image: {img_path}")
+                continue
+
             for box_key, labels in box_key_to_label.items():
                 action = labels[0]["Action"].lower()
                 if action not in classes:

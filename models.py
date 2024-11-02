@@ -113,7 +113,7 @@ class Ovis9B(BaseClassificationModel):
         # generate output
         with torch.inference_mode():
             gen_kwargs = dict(
-                max_new_tokens=1024,
+                max_new_tokens=512,
                 do_sample=False,
                 top_p=None,
                 top_k=None,
@@ -222,31 +222,30 @@ class LlavaOnevision7B(BaseClassificationModel):
 #         )
 
 
-# class Pixtral12B(BaseClassificationModel):
-#     model: LlavaForConditionalGeneration
-#     processor: AutoProcessor
+class Pixtral12B(BaseClassificationModel):
+    model: LlavaForConditionalGeneration
+    processor: AutoProcessor
 
-#     def __init__(self) -> None:
-#         model_id = "mistral-community/pixtral-12b"
-#         self.model = LlavaForConditionalGeneration.from_pretrained(
-#             model_id,
-#             device_map="auto",
-#             load_in_4bit=True,
-#         )
-#         self.processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
+    def __init__(self) -> None:
+        model_id = "mistral-community/pixtral-12b"
+        self.processor = AutoProcessor.from_pretrained(model_id)
+        self.model = LlavaForConditionalGeneration.from_pretrained(
+            model_id,
+            load_in_8bit=True,
+            low_cpu_mem_usage=True,
+            use_flash_attention_2=True,
+        )
 
-#     def predict(self, images: list[Image.Image], prompt: str) -> str:
-#         # with torch.autocast("cuda", enabled=True, dtype=torch.float16):
-#         images_query = "".join(["[IMG]"] * len(images))
-#         PROMPT = f"<s>[INST]{prompt}\n{images_query}[/INST]"
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
+        images_query = "".join(["[IMG]"] * len(images))
+        PROMPT = f"<s>[INST]{prompt}\n{images_query}[/INST]"
 
-#         inputs = self.processor(text=PROMPT, images=images, return_tensors="pt").to(
-#             "cuda"
-#         )
-#         generate_ids = self.model.generate(**inputs, max_new_tokens=500)
-#         output = self.processor.batch_decode(
-#             generate_ids,
-#             skip_special_tokens=True,
-#             clean_up_tokenization_spaces=False,
-#         )[0]
-#         return output.replace(prompt, "").strip()
+        inputs = self.processor(text=PROMPT, images=images, return_tensors="pt").to(
+            "cuda"
+        )
+        generate_ids = self.model.generate(**inputs, max_new_tokens=500)
+        output = self.processor.batch_decode(
+            generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0]
+
+        return output.split("string: confidence in the prediction from 0 to 1.")[1]

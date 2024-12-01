@@ -1,4 +1,12 @@
+from pydantic import BaseModel
+
 from .base import BasePrompt
+
+
+class ActionLabel(BaseModel):
+    description: str
+    action: str
+
 
 SINGLE_IMAGE_PROMPT = """Classify the action of the person in the **purple mask**. \
 For object interactions the object must be visible. If the highlighted person is not \
@@ -10,10 +18,10 @@ Choose from the list:
 
 Only respond with a JSON object with the following format:
 {{
-    "Description": "string: describe the person you're classifying"
-    "Action": "string: the action the person is performing, must be exact text from the list"
-    "Confidence": "string: confidence in the prediction from 0 to 1."
-}}"""
+    "action": "..."
+    "description": "..."
+}}
+"""
 
 
 class HumanActionPrompt(BasePrompt):
@@ -23,13 +31,13 @@ class HumanActionPrompt(BasePrompt):
         self.actions = actions
 
     def prompt(self) -> str:
-        return (
-            SINGLE_IMAGE_PROMPT.format(
-                actions="\n".join(f'- "{action}"' for action in self.actions)
-            )
-            .strip()
-            .strip("\n")
-        )
+        return SINGLE_IMAGE_PROMPT.format(
+            actions="\n".join(f'- "{action}"' for action in self.actions),
+            schema=ActionLabel.model_json_schema(),
+            example=ActionLabel(
+                description="This is a description", action="walking"
+            ).model_dump_json(),
+        ).strip("\n")
 
 
 MULTI_IMAGE_PROMPT = """
@@ -47,9 +55,8 @@ Choose from the list:
 
 Respond with a JSON object with the following format:
 {{
-    "Description": describe the person you're classifying
-    "Action": the action the person is performing, must be exact text from the list
-    "Confidence": confidence in the prediction from 0 to 1.
+    "action": "..."
+    "description": "..."
 }}
 """
 
@@ -63,7 +70,11 @@ class MultiImageHumanActionPrompt(BasePrompt):
     def prompt(self) -> str:
         return (
             MULTI_IMAGE_PROMPT.format(
-                actions="\n".join(f'- "{action}"' for action in self.actions)
+                actions="\n".join(f'- "{action}"' for action in self.actions),
+                schema=ActionLabel.model_json_schema(),
+                example=ActionLabel(
+                    description="This is a description", action="walking"
+                ).model_dump_json(),
             )
             .strip()
             .strip("\n")

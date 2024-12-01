@@ -1,7 +1,11 @@
+import base64
+import io
+import json
+from time import sleep
 from typing import Any
 
-import requests
 import torch
+from openai import OpenAI
 from PIL import Image
 from transformers import (
     AutoModelForCausalLM,
@@ -9,11 +13,60 @@ from transformers import (
     BitsAndBytesConfig,
     GenerationConfig,
     LlavaForConditionalGeneration,
+    LlavaNextForConditionalGeneration,
+    LlavaNextProcessor,
     LlavaOnevisionForConditionalGeneration,
-    MllamaForConditionalGeneration,
 )
 
 from .base import BaseClassificationModel
+
+
+class Gpt4oMini(BaseClassificationModel):
+    client: OpenAI
+    max_tokens: int
+    sleep_time: int
+
+    def __init__(self, max_tokens: int = 1024, sleep_time: int = 5) -> None:
+        self.client = OpenAI()
+        self.max_tokens = max_tokens
+        self.sleep_time = sleep_time
+
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
+        images = [
+            image.convert("RGB") if image.mode != "RGB" else image for image in images
+        ]
+
+        img_byte_arrs = []
+        for image in images:
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format="JPEG")
+            img_byte_arrs.append(img_byte_arr.getvalue())
+
+        response = self.client.chat.completions.create(
+            model="gpt-4o-mini",
+            max_tokens=self.max_tokens,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        *[
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64.b64encode(img_byte_arr).decode('utf-8')}",
+                                    "detail": "low",
+                                },
+                            }
+                            for img_byte_arr in img_byte_arrs
+                        ],
+                    ],
+                },
+            ],
+        )
+
+        sleep(self.sleep_time)
+        return response.choices[0].message.content
 
 
 class Molmo7B(BaseClassificationModel):
@@ -30,13 +83,13 @@ class Molmo7B(BaseClassificationModel):
         self.model = AutoModelForCausalLM.from_pretrained(
             "allenai/Molmo-7B-D-0924",
             trust_remote_code=True,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.bfloat16,
             device_map="auto",
             load_in_4bit=load_in_4bit,
         )
 
     def predict(self, images: list[Image.Image], prompt: str) -> str:
-        with torch.autocast("cuda", enabled=True, dtype=torch.float16):
+        with torch.autocast("cuda", enabled=True, dtype=torch.bfloat16):
             inputs = self.processor.process(
                 images=[
                     image.convert("RGB") if image.mode != "RGB" else image
@@ -45,20 +98,14 @@ class Molmo7B(BaseClassificationModel):
                 text=prompt,
             )
 
-            # TODO: average the image embeddings into one if there are multiple
-            print(inputs.keys())
-
             # move inputs to the correct device and make a batch of size 1
             inputs = {
                 k: v.to(self.model.device).unsqueeze(0) for k, v in inputs.items()
             }
 
-            print(inputs.keys())
-
-            # generate output; maximum 200 new tokens; stop generation when <|endoftext|> is generated
             output = self.model.generate_from_batch(
                 inputs,
-                GenerationConfig(max_new_tokens=500, stop_strings="<|endoftext|>"),
+                GenerationConfig(max_new_tokens=1024, stop_strings="<|endoftext|>"),
                 tokenizer=self.processor.tokenizer,
             )
 
@@ -68,7 +115,7 @@ class Molmo7B(BaseClassificationModel):
                 generated_tokens, skip_special_tokens=True
             )
 
-            return generated_text
+            return json.dumps({"description": generated_text.strip()})
 
 
 class Ovis9B(BaseClassificationModel):
@@ -113,7 +160,7 @@ class Ovis9B(BaseClassificationModel):
         # generate output
         with torch.inference_mode():
             gen_kwargs = dict(
-                max_new_tokens=512,
+                max_new_tokens=1024,
                 do_sample=False,
                 top_p=None,
                 top_k=None,
@@ -131,7 +178,7 @@ class Ovis9B(BaseClassificationModel):
                 **gen_kwargs,
             )[0]
             output = self.text_tokenizer.decode(output_ids, skip_special_tokens=True)
-            return output
+            return json.dumps({"description": output.strip()})
 
 
 class LlavaOnevision7B(BaseClassificationModel):
@@ -249,3 +296,57 @@ class Pixtral12B(BaseClassificationModel):
         )[0]
 
         return output.split("string: confidence in the prediction from 0 to 1.")[1]
+
+
+class Llava34B(BaseClassificationModel):
+    model: LlavaNextForConditionalGeneration
+    processor: LlavaNextProcessor
+
+    def __init__(self) -> None:
+        self.processor = LlavaNextProcessor.from_pretrained(
+            "llava-hf/llava-v1.6-34b-hf"
+        )
+
+        self.model = LlavaNextForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-v1.6-34b-hf",
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
+            load_in_4bit=True,
+            use_flash_attention_2=True,
+        )
+        self.model.to("cuda:0")
+
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
+        # Define a chat histiry and use `apply_chat_template` to get correctly formatted prompt
+        # Each value in "content" has to be a list of dicts with types ("text", "image")
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                ]
+                + [{"type": "image"} for _ in range(len(images))],
+            },
+        ]
+        prompt_input = self.processor.apply_chat_template(
+            conversation, add_generation_prompt=True
+        )
+
+        inputs = self.processor(
+            images=images, text=prompt_input, return_tensors="pt"
+        ).to("cuda:0")
+
+        output = self.model.generate(**inputs, max_new_tokens=512)
+
+        answer = self.processor.decode(output[0], skip_special_tokens=True)
+        answer = answer.split("<|im_start|> assistant")[1].strip()
+        return answer
+
+
+class QwenVL72B(BaseClassificationModel):
+
+    def __init__(self) -> None:
+        pass
+
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
+        pass

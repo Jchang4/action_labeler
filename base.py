@@ -56,6 +56,7 @@ class BaseActionLabeler(ABC):
 
     verbose: bool = False
     save_every: int = 50
+    save_filename: str = "classification.pickle"
 
     def __init__(
         self,
@@ -66,16 +67,18 @@ class BaseActionLabeler(ABC):
         preprocessors: list[BaseImagePreprocessor],
         verbose: bool = False,
         save_every: int = 50,
+        save_filename: str = "classification.pickle",
     ):
         self.folder = folder
         self.prompt = prompt
         self.model = model
         self.filters = filters
         self.preprocessors = preprocessors
-        self.results = load_pickle(folder, filename="classification.pickle")
+        self.results = load_pickle(folder, filename=save_filename)
 
         self.verbose = verbose
         self.save_every = save_every
+        self.save_filename = save_filename
 
     @abstractmethod
     def img_path_to_detections(
@@ -127,10 +130,7 @@ class BaseActionLabeler(ABC):
 
                 # Preprocess Image
                 annotated_frame = image.copy()
-                for prepreprocessor in self.preprocessors:
-                    annotated_frame = prepreprocessor.preprocess(
-                        annotated_frame, i, detections
-                    )
+                annotated_frame = self.preprocess_image(annotated_frame, i, detections)
 
                 # Predict
                 try:
@@ -154,19 +154,11 @@ class BaseActionLabeler(ABC):
                     print(output)
 
             if len(self.results) % self.save_every == 0:
-                save_pickle(
-                    dict(self.results),
-                    self.folder,
-                    filename="classification.pickle",
-                )
+                self.save_results()
                 print(f"Saved {len(self.results)} images")
 
-        self.remove_invalid_classes()
-        save_pickle(
-            dict(self.results),
-            self.folder,
-            filename="classification.pickle",
-        )
+        # self.remove_invalid_classes()
+        self.save_results()
 
     @property
     def images_path(self):
@@ -190,6 +182,13 @@ class BaseActionLabeler(ABC):
     def get_detect_path(self, img_path: Path) -> Path:
         """Get the path to the detection file."""
         return self.detect_path / img_path.with_suffix(".txt").name
+
+    def preprocess_image(
+        self, image: Image.Image, index: int, detections: sv.Detections
+    ) -> Image.Image:
+        for prepreprocessor in self.preprocessors:
+            image = prepreprocessor.preprocess(image, index, detections)
+        return image
 
     def create_dataset(self, output_folder: Optional[Path] = None):
         """Create a Yolo v8 dataset from the results."""
@@ -222,7 +221,7 @@ class BaseActionLabeler(ABC):
                 continue
 
             for box_key, labels in box_key_to_label.items():
-                action = labels[0]["Action"].lower()
+                action = labels[0]["action"].lower()
                 if action not in classes:
                     print(f"Skipping invalid class: {action}")
                     continue
@@ -250,7 +249,7 @@ class BaseActionLabeler(ABC):
         result_classes = set()
         for box_key_to_label in self.results.values():
             for labels in box_key_to_label.values():
-                result_classes.update([label["Action"] for label in labels])
+                result_classes.update([label["action"] for label in labels])
         return result_classes
 
     def get_class_counts(self) -> pd.DataFrame:
@@ -259,14 +258,21 @@ class BaseActionLabeler(ABC):
         for box_key_to_label in self.results.values():
             for labels in box_key_to_label.values():
                 for label in labels:
-                    action = label["Action"]
+                    action = label["action"]
                     class_counts[action] = class_counts.get(action, 0) + 1
 
-        return pd.DataFrame(class_counts.items(), columns=["Action", "Count"])
+        return pd.DataFrame(class_counts.items(), columns=["action", "count"])
 
     ##########################
     #### Edit Results ########
     ##########################
+
+    def save_results(self):
+        save_pickle(
+            dict(self.results),
+            self.folder,
+            filename=self.save_filename,
+        )
 
     def remove_classes(self, classes: set[str]):
         """Remove classes from the results."""
@@ -274,7 +280,7 @@ class BaseActionLabeler(ABC):
             for box_key, labels in box_key_to_label.items():
                 # Remove classes
                 box_key_to_label[box_key] = [
-                    label for label in labels if label["Action"] not in classes
+                    label for label in labels if label["action"] not in classes
                 ]
 
             # Remove empty box keys
@@ -291,7 +297,7 @@ class BaseActionLabeler(ABC):
 
         for _, box_key_to_label in self.results.items():
             for _, labels in box_key_to_label.items():
-                all_classes.update([label["Action"] for label in labels])
+                all_classes.update([label["action"] for label in labels])
 
         invalid_classes = all_classes - set(valid_classes)
         self.remove_classes(invalid_classes)
@@ -316,6 +322,6 @@ class BaseActionLabeler(ABC):
                     self.results[img_path][box_key] = [
                         label
                         for label in labels
-                        if label["Action"] in classes_to_keep
-                        or label["Action"].lower() in classes_to_keep
+                        if label["action"] in classes_to_keep
+                        or label["action"].lower() in classes_to_keep
                     ]

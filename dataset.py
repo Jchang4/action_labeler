@@ -1,15 +1,16 @@
+import shutil
 from pathlib import Path
 from typing import Optional
+
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import yaml
-import shutil
-from tqdm.auto import tqdm
-import matplotlib.pyplot as plt
 from PIL import Image
-import numpy as np
+from tqdm.auto import tqdm
 
-from .preprocessors import BoxImagePreprocessor
 from .helpers import get_detection, xywh_to_xyxy, xyxy_to_mask
+from .preprocessors import BoxImagePreprocessor
 
 
 class Dataset:
@@ -272,6 +273,23 @@ class Dataset:
 
             plt.suptitle(class_name)
             plt.show()
+
+        return self
+
+    def plot_class(self, class_name: str, num_images: int = 20) -> "Dataset":
+        class_df = self.df[self.df["class_name"] == class_name]
+        class_df = class_df.sample(min(num_images, len(class_df)))
+
+        fig, axes = plt.subplots(num_images // 2, 2, figsize=(20, 20))
+
+        for ax, (_, row) in zip(axes.ravel(), class_df.iterrows()):
+            image = Image.open(row["image_path"])
+            image.thumbnail((480, 480))
+            ax.imshow(image)
+            ax.axis("off")
+
+        plt.tight_layout()
+        plt.show()
 
         return self
 

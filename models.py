@@ -6,8 +6,15 @@ from typing import Any
 
 import torch
 from openai import OpenAI
-from PIL import Image
-from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
+from PIL import Image, ImageStat
+from transformers import (
+    AutoModelForCausalLM,
+    AutoProcessor,
+    GenerationConfig,
+    Pipeline,
+    Qwen2VLForConditionalGeneration,
+    pipeline,
+)
 
 from .base import BaseClassificationModel
 
@@ -82,10 +89,7 @@ class Molmo7B(BaseClassificationModel):
     def predict(self, images: list[Image.Image], prompt: str) -> str:
         with torch.autocast("cuda", enabled=True, dtype=torch.bfloat16):
             inputs = self.processor.process(
-                images=[
-                    image.convert("RGB") if image.mode != "RGB" else image
-                    for image in images
-                ],
+                images=[self.get_image(image) for image in images],
                 text=prompt,
             )
 
@@ -107,6 +111,26 @@ class Molmo7B(BaseClassificationModel):
             )
 
             return json.dumps({"description": generated_text.strip()})
+
+    @staticmethod
+    def get_image(image: Image.Image) -> Image.Image:
+        image = image.copy()
+        gray_image = image.convert("L")  # Convert to grayscale
+
+        # Calculate the average brightness
+        stat = ImageStat.Stat(gray_image)
+        average_brightness = stat.mean[0]  # Get the average value
+
+        # Define background color based on brightness (threshold can be adjusted)
+        bg_color = (0, 0, 0) if average_brightness > 127 else (255, 255, 255)
+
+        # Create a new image with the same size as the original, filled with the background color
+        new_image = Image.new("RGB", image.size, bg_color)
+
+        # Paste the original image on top of the background (use image as a mask if needed)
+        new_image.paste(image, (0, 0), image if image.mode == "RGBA" else None)
+
+        return new_image
 
 
 class Ovis9B(BaseClassificationModel):
@@ -170,3 +194,87 @@ class Ovis9B(BaseClassificationModel):
             )[0]
             output = self.text_tokenizer.decode(output_ids, skip_special_tokens=True)
             return json.dumps({"description": output.strip()})
+
+
+class Qwen2VL7B(BaseClassificationModel):
+    model: Qwen2VLForConditionalGeneration
+    processor: AutoProcessor
+
+    def __init__(self) -> None:
+        self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct-AWQ", torch_dtype="auto", device_map="auto"
+        )
+
+        min_pixels = 256 * 28 * 28
+        max_pixels = 1280 * 28 * 28
+        self.processor = AutoProcessor.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct-AWQ",
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+        )
+
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
+        messages = [{"type": "image"} for _ in images]
+        messages.append({"type": "text", "text": prompt})
+        conversation = [
+            {
+                "role": "user",
+                "content": messages,
+            }
+        ]
+
+        # Preprocess the inputs
+        text_prompt = self.processor.apply_chat_template(
+            conversation, add_generation_prompt=True
+        )
+        # Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe this image.<|im_end|>\n<|im_start|>assistant\n'
+
+        inputs = self.processor(
+            text=[text_prompt], images=[images], padding=True, return_tensors="pt"
+        )
+        inputs = inputs.to("cuda")
+
+        # Inference: Generation of the output
+        output_ids = self.model.generate(**inputs, max_new_tokens=2048)
+        generated_ids = [
+            output_ids[len(input_ids) :]
+            for input_ids, output_ids in zip(inputs.input_ids, output_ids)
+        ]
+        output_text = self.processor.batch_decode(
+            generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
+        )
+
+        return json.dumps({"description": output_text[0]})
+
+
+class HuggingFaceImageClassificationModel(BaseClassificationModel):
+    pipeline: Pipeline
+
+    def __init__(self) -> None:
+        HF_MODEL_DIR = "./datasets/human_action_classification_finetuned"
+
+        self.pipeline = pipeline(
+            "image-classification", model=HF_MODEL_DIR, device="cuda"
+        )
+
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
+        # Pipeline returns a list of lists of dicts with keys "label" and "score"
+        results = self.pipeline(images)
+        # Average the scores
+        combined_results = {}
+        for result in results:
+            for data in result:
+                label = data["label"]
+                score = data["score"]
+                combined_results[label] = combined_results.get(label, 0) + score
+        # Best Label and Score
+        best_label = max(combined_results, key=combined_results.get)
+        best_score = combined_results[best_label]
+
+        return json.dumps(
+            {
+                "action": best_label,
+                "confidence": best_score,
+                **combined_results,
+            }
+        )

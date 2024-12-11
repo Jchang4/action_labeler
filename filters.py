@@ -1,5 +1,5 @@
-from PIL import Image
 import supervision as sv
+from PIL import Image
 
 from .base import BaseImageFilter
 
@@ -78,9 +78,9 @@ class SmallDetectionsFilter(BaseImageFilter):
         if box_width > self.size_approve or box_height > self.size_approve:
             return True
         elif box_area / image_area < self.min_area:
-            print(
-                f"Box area too small ({int(box_width)} x {int(box_height)}): {int(box_area)} / {image_area} = {(box_area/image_area):.2f} < {self.min_area}"
-            )
+            # print(
+            #     f"Box area too small ({int(box_width)} x {int(box_height)}): {int(box_area)} / {image_area} = {(box_area/image_area):.2f} < {self.min_area}"
+            # )
             return False
 
         return True

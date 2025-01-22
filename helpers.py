@@ -130,26 +130,22 @@ def create_dataset_yaml(path: Path, classes: list[str]):
     yaml.dump(data, open(path / "data.yaml", "w"))
 
 
-def get_image(image_path: Path) -> Image.Image:
-    image = Image.open(image_path)
+def resize_to_min_dimension(image: Image.Image, min_size: int):
+    # Get original dimensions
+    width, height = image.size
 
-    # Convert the image to grayscale to calculate brightness
-    gray_image = image.convert("L")  # Convert to grayscale
+    # Determine the scaling factor to ensure the smaller dimension reaches min_size
+    if width < height:
+        scale_factor = min_size / width
+    else:
+        scale_factor = min_size / height
 
-    # Calculate the average brightness
-    stat = ImageStat.Stat(gray_image)
-    average_brightness = stat.mean[0]  # Get the average value
+    # Calculate the new size while preserving the aspect ratio
+    new_width = int(width * scale_factor)
+    new_height = int(height * scale_factor)
 
-    # Define background color based on brightness (threshold can be adjusted)
-    bg_color = (0, 0, 0) if average_brightness > 127 else (255, 255, 255)
-
-    # Create a new image with the same size as the original, filled with the background color
-    new_image = Image.new("RGB", image.size, bg_color)
-
-    # Paste the original image on top of the background (use image as a mask if needed)
-    new_image.paste(image, (0, 0), image if image.mode == "RGBA" else None)
-
-    return new_image
+    # Resize the image
+    return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
 
 def parallel(

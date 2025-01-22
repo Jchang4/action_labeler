@@ -11,10 +11,12 @@ from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
     GenerationConfig,
+    PaliGemmaForConditionalGeneration,
+    PaliGemmaProcessor,
     Pipeline,
-    Qwen2VLForConditionalGeneration,
     pipeline,
 )
+from transformers.image_utils import load_image
 
 from .base import BaseClassificationModel
 
@@ -64,7 +66,13 @@ class Gpt4oMini(BaseClassificationModel):
         )
 
         sleep(self.sleep_time)
-        return response.choices[0].message.content
+        return json.dumps(
+            {
+                "description": response.choices[0]
+                .message.content.replace("action: ", "")
+                .strip()
+            }
+        )
 
 
 class Molmo7B(BaseClassificationModel):
@@ -157,12 +165,16 @@ class Ovis9B(BaseClassificationModel):
 
     def predict(self, images: list[Image.Image], prompt: str) -> str:
         # enter image path and prompt
-        image = images[0] if len(images) == 1 else images[1]
         text = prompt
-        query = f"<image>\n{text}"
+        query = f"<images>\n{text}"
+        if len(images) > 1:
+            query = ""
+            for i, image in enumerate(images):
+                query += f"Image {i+1}: <image>\n"
+            query += text
 
         # format conversation
-        prompt, input_ids, pixel_values = self.model.preprocess_inputs(query, [image])
+        prompt, input_ids, pixel_values = self.model.preprocess_inputs(query, images)
         attention_mask = torch.ne(input_ids, self.text_tokenizer.pad_token_id)
         input_ids = input_ids.unsqueeze(0).to(device=self.model.device)
         attention_mask = attention_mask.unsqueeze(0).to(device=self.model.device)
@@ -196,57 +208,6 @@ class Ovis9B(BaseClassificationModel):
             return json.dumps({"description": output.strip()})
 
 
-class Qwen2VL7B(BaseClassificationModel):
-    model: Qwen2VLForConditionalGeneration
-    processor: AutoProcessor
-
-    def __init__(self) -> None:
-        self.model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct-AWQ", torch_dtype="auto", device_map="auto"
-        )
-
-        min_pixels = 256 * 28 * 28
-        max_pixels = 1280 * 28 * 28
-        self.processor = AutoProcessor.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct-AWQ",
-            min_pixels=min_pixels,
-            max_pixels=max_pixels,
-        )
-
-    def predict(self, images: list[Image.Image], prompt: str) -> str:
-        messages = [{"type": "image"} for _ in images]
-        messages.append({"type": "text", "text": prompt})
-        conversation = [
-            {
-                "role": "user",
-                "content": messages,
-            }
-        ]
-
-        # Preprocess the inputs
-        text_prompt = self.processor.apply_chat_template(
-            conversation, add_generation_prompt=True
-        )
-        # Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe this image.<|im_end|>\n<|im_start|>assistant\n'
-
-        inputs = self.processor(
-            text=[text_prompt], images=[images], padding=True, return_tensors="pt"
-        )
-        inputs = inputs.to("cuda")
-
-        # Inference: Generation of the output
-        output_ids = self.model.generate(**inputs, max_new_tokens=2048)
-        generated_ids = [
-            output_ids[len(input_ids) :]
-            for input_ids, output_ids in zip(inputs.input_ids, output_ids)
-        ]
-        output_text = self.processor.batch_decode(
-            generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
-        )
-
-        return json.dumps({"description": output_text[0]})
-
-
 class HuggingFaceImageClassificationModel(BaseClassificationModel):
     pipeline: Pipeline
 
@@ -277,4 +238,110 @@ class HuggingFaceImageClassificationModel(BaseClassificationModel):
                 "confidence": best_score,
                 **combined_results,
             }
+        )
+
+
+class PaliGemma10b448(BaseClassificationModel):
+    model: PaliGemmaForConditionalGeneration
+    processor: PaliGemmaProcessor
+
+    def __init__(self) -> None:
+        model_id = "google/paligemma2-10b-pt-448"
+
+        self.model = PaliGemmaForConditionalGeneration.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        ).eval()
+        self.processor = PaliGemmaProcessor.from_pretrained(model_id)
+
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
+        image_prefix = "\n".join(["<image>"] * len(images))
+
+        model_inputs = (
+            self.processor(
+                # The model is a text completion model, so we need to provide the "Answer:" suffix
+                text=f"{image_prefix}\n{prompt}\n\nResponse:",
+                images=[load_image(image) for image in images],
+                return_tensors="pt",
+            )
+            .to(torch.bfloat16)
+            .to(self.model.device)
+        )
+        input_len = model_inputs["input_ids"].shape[-1]
+
+        with torch.inference_mode():
+            generation = self.model.generate(
+                **model_inputs, max_new_tokens=512, do_sample=False
+            )
+            generation = generation[0][input_len:]
+            decoded = self.processor.decode(generation, skip_special_tokens=True)
+            return json.dumps({"description": decoded.strip()})
+
+
+class PaliGemma10b896(BaseClassificationModel):
+    model: PaliGemmaForConditionalGeneration
+    processor: PaliGemmaProcessor
+
+    def __init__(self) -> None:
+        model_id = "google/paligemma2-10b-pt-896"
+
+        self.model = PaliGemmaForConditionalGeneration.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            load_in_4bit=True,
+        ).eval()
+        self.processor = PaliGemmaProcessor.from_pretrained(model_id)
+
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
+        image_prefix = "\n".join(["<image>"] * len(images))
+
+        model_inputs = (
+            self.processor(
+                # The model is a text completion model, so we need to provide the "Answer:" suffix
+                text=f"{image_prefix}\n{prompt}\n\nResponse:",
+                images=[load_image(image) for image in images],
+                return_tensors="pt",
+            )
+            .to(torch.bfloat16)
+            .to(self.model.device)
+        )
+        input_len = model_inputs["input_ids"].shape[-1]
+
+        with torch.inference_mode():
+            generation = self.model.generate(
+                **model_inputs, max_new_tokens=512, do_sample=False
+            )
+            generation = generation[0][input_len:]
+            decoded = self.processor.decode(generation, skip_special_tokens=True)
+            return json.dumps({"description": decoded.strip()})
+
+
+class LavaOneVision7B(BaseClassificationModel):
+    pipeline: Pipeline
+
+    def __init__(self) -> None:
+        self.pipeline = pipeline(
+            "image-text-to-text",
+            model="llava-hf/llava-onevision-qwen2-7b-ov-hf",
+            model_kwargs={
+                "load_in_8bit": True,
+                "use_flash_attention_2": True,
+            },
+            device_map="cuda",
+        )
+
+    def predict(self, images: list[Image.Image], prompt: str) -> str:
+        content = [{"type": "image", "image": image} for image in images]
+        messages = [
+            {
+                "role": "user",
+                "content": content + [{"type": "text", "text": prompt}],
+            },
+        ]
+
+        out = self.pipeline(text=messages, max_new_tokens=512)
+        return json.dumps(
+            {"description": out[0]["generated_text"][-1]["content"].strip()}
         )

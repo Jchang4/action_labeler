@@ -122,6 +122,10 @@ class Dataset:
             )
 
             shutil.copy(row["image_path"], image_path)
+
+            if row["class_name"] == "none":
+                continue
+
             label = f"{row['class_id']} {row['xywh']}"
             with label_path.open("a") as f:
                 f.write(label + "\n")
@@ -210,10 +214,12 @@ class Dataset:
             .reset_index(drop=True)
         )
 
-        # Randomly set the dataset to train or valid
-        balanced_df["dataset"] = balanced_df["dataset"].apply(
-            lambda x: "train" if np.random.rand() < 0.8 else "valid"
-        )
+        # Set train and valid dataset based on image path
+        # An image path should only be in one dataset
+        for image_path in balanced_df["image_path"].unique():
+            balanced_df.loc[balanced_df["image_path"] == image_path, "dataset"] = (
+                np.random.choice(["train", "valid"], p=[0.8, 0.2])
+            )
 
         self.df = balanced_df
 
@@ -318,4 +324,5 @@ def _remake_dataset_dir(folder: Path):
     (folder / "train" / "images").mkdir(parents=True, exist_ok=True)
     (folder / "train" / "labels").mkdir(parents=True, exist_ok=True)
     (folder / "valid" / "images").mkdir(parents=True, exist_ok=True)
+    (folder / "valid" / "labels").mkdir(parents=True, exist_ok=True)
     (folder / "valid" / "labels").mkdir(parents=True, exist_ok=True)

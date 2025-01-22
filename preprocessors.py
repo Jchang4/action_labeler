@@ -2,7 +2,7 @@ import supervision as sv
 from PIL import Image
 
 from .base import BaseImagePreprocessor
-from .helpers import get_detection
+from .helpers import get_detection, resize_to_min_dimension
 
 
 class MaskImagePreprocessor(BaseImagePreprocessor):
@@ -117,8 +117,7 @@ class ResizeImagePreprocessor(BaseImagePreprocessor):
     def preprocess(
         self, image: Image.Image, index: int, detections: sv.Detections
     ) -> Image.Image:
-        image.thumbnail((self.size, self.size))
-        return image
+        return resize_to_min_dimension(image, self.size)
 
 
 class MinResizeImagePreprocessor(BaseImagePreprocessor):

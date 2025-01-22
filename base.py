@@ -12,7 +12,6 @@ from tqdm.auto import tqdm
 
 from .helpers import (
     create_dataset_yaml,
-    get_image,
     load_pickle,
     parse_response,
     save_pickle,
@@ -24,7 +23,13 @@ class BasePrompt(ABC):
     actions: list[str]
 
     @abstractmethod
-    def prompt(self) -> str: ...
+    def prompt(
+        self,
+        image_path: Optional[Path] = None,
+        image: Optional[Image.Image] = None,
+        index: Optional[int] = None,
+        detections: Optional[sv.Detections] = None,
+    ) -> str: ...
 
 
 class BaseClassificationModel(ABC):
@@ -103,7 +108,7 @@ class BaseActionLabeler(ABC):
                 continue
 
             # Raw Data - we reuse this later
-            image = get_image(img_path)
+            image = self.get_image(img_path)
             detections = self.img_path_to_detections(image, img_path)
             if detections.is_empty():
                 continue
@@ -135,7 +140,8 @@ class BaseActionLabeler(ABC):
                 # Predict
                 try:
                     raw_response = self.model.predict(
-                        [annotated_frame], self.prompt.prompt()
+                        [annotated_frame],
+                        self.prompt.prompt(img_path, image, i, detections),
                     )
                     output = parse_response(raw_response)
                     # Save Results
@@ -182,6 +188,10 @@ class BaseActionLabeler(ABC):
     def get_detect_path(self, img_path: Path) -> Path:
         """Get the path to the detection file."""
         return self.detect_path / img_path.with_suffix(".txt").name
+
+    def get_image(self, img_path: Path) -> Image.Image:
+        """Get the image."""
+        return Image.open(img_path)
 
     def preprocess_image(
         self, image: Image.Image, index: int, detections: sv.Detections

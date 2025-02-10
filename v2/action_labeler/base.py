@@ -80,6 +80,8 @@ class BaseActionLabeler(IActionLabeler):
 
                 # Ensure image is valid
                 if not self.is_valid(image, i, detections):
+                    if box_key in self.results[str(image_path)]:
+                        del self.results[str(image_path)][box_key]
                     continue
 
                 # Preprocess image
@@ -139,6 +141,8 @@ class BaseActionLabeler(IActionLabeler):
     ) -> str | None:
         try:
             prompt = self.prompt.prompt(images[0], index, detections, image_path)
+            if self.verbose:
+                print(prompt)
             prediction = self.model.predict(prompt, images)
             return prediction
         except Exception as e:

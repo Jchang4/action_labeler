@@ -1,5 +1,3 @@
-import json
-
 import torch
 from PIL import Image
 from qwen_vl_utils import process_vision_info
@@ -21,7 +19,13 @@ class Qwen25VL(BaseVisionLanguageModel):
         )
 
         # default processer
-        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
+        min_pixels = 256 * 28 * 28
+        max_pixels = 1280 * 28 * 28
+        self.processor = AutoProcessor.from_pretrained(
+            "Qwen/Qwen2.5-VL-7B-Instruct",
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+        )
 
     def predict(self, prompt: str, images: list[Image.Image]) -> str:
         messages = [
@@ -47,7 +51,7 @@ class Qwen25VL(BaseVisionLanguageModel):
         inputs = inputs.to("cuda")
 
         # Inference: Generation of the output
-        generated_ids = self.model.generate(**inputs, max_new_tokens=128)
+        generated_ids = self.model.generate(**inputs, max_new_tokens=1280)
         generated_ids_trimmed = [
             out_ids[len(in_ids) :]
             for in_ids, out_ids in zip(inputs.input_ids, generated_ids)

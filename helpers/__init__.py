@@ -13,6 +13,9 @@ from PIL import Image, ImageStat
 from tqdm.auto import tqdm
 from ultralytics.utils.ops import segment2box
 
+from .general import parallel
+from .image_helpers import add_bounding_box, add_label, add_mask, resize_image
+
 
 def load_pickle(path: str | Path, filename: str = "classification.pickle"):
     path = Path(path)
@@ -56,6 +59,19 @@ def segmentation_to_mask(image: Image.Image, single_segmentation: list[float]):
     return mask
 
 
+def get_xywh_from_image_path(image_path: Path) -> list[float] | None:
+    detect_path = image_path.parent.parent / "detect" / f"{image_path.stem}.txt"
+    if not detect_path.exists():
+        return None
+
+    xywh = [
+        list(map(float, line.split(" ")))[1:]
+        for line in detect_path.read_text().split("\n")
+        if line.strip()
+    ]
+    return xywh
+
+
 def xyxy_to_xywh(image: Image.Image, xyxy: list[float]) -> list[float]:
     """Convert xyxy boxes to x_center, y_center, width, height."""
     w, h = image.size
@@ -97,7 +113,7 @@ def xywh_to_xyxy(image: Image.Image, xywh: list[float]) -> list[float]:
 
 def get_detection(xyxy: list[list[float]], mask: list[list[float]]):
     return sv.Detections(
-        xyxy=np.array(xyxy),
+        xyxy=np.array(xyxy).reshape(-1, 4),
         mask=np.array(mask).astype(bool),
         class_id=np.array([0] * len(xyxy)),
     )
@@ -131,47 +147,19 @@ def create_dataset_yaml(path: Path, classes: list[str]):
 
 
 def resize_to_min_dimension(image: Image.Image, min_size: int):
-    # Get original dimensions
-    width, height = image.size
+    """Resize the image so that the smallest dimension is at least `min_size`.
 
-    # Determine the scaling factor to ensure the smaller dimension reaches min_size
-    if width < height:
-        scale_factor = min_size / width
-    else:
-        scale_factor = min_size / height
-
-    # Calculate the new size while preserving the aspect ratio
-    new_width = int(width * scale_factor)
-    new_height = int(height * scale_factor)
-
-    # Resize the image
-    return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-
-def parallel(
-    f: Callable,
-    items: list,
-    *args: list,
-    n_workers=24,
-    **kwargs,
-):
-    """Applies `func` in parallel to `items`, using `n_workers`
+    This function preserves the aspect ratio of the image.
 
     Args:
-        f (function): function to apply
-        items (list): list of items to apply `f` to
-        n_workers (int, optional): number of workers. Defaults to 24.
+        image (PIL.Image.Image): The image to resize.
+        min_size (int): The minimum dimension to resize to.
 
     Returns:
-        list: list of results
+        PIL.Image.Image: The resized image.
     """
-    with ProcessPoolExecutor(max_workers=n_workers) as ex:
-        r = list(
-            tqdm(
-                ex.map(f, items, *args, **kwargs),
-                total=len(items),
-            )
-        )
-    if any([o is Exception for o in r]):
-        raise Exception(r)
-    return r
+    width, height = image.size
+    scale_factor = min_size / min(width, height)
+    new_width = int(width * scale_factor)
+    new_height = int(height * scale_factor)
+    return image.resize((new_width, new_height), Image.Resampling.LANCZOS)

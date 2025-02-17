@@ -13,8 +13,7 @@ class Ovis234B(BaseVisionLanguageModel):
     def __init__(self) -> None:
         self.model = AutoModelForCausalLM.from_pretrained(
             "AIDC-AI/Ovis2-34B",
-            # torch_dtype=torch.bfloat16,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.bfloat16,
             multimodal_max_length=32768,
             trust_remote_code=True,
             load_in_4bit=True,

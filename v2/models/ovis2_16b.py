@@ -17,7 +17,7 @@ class Ovis216B(BaseVisionLanguageModel):
             torch_dtype=torch.float16,
             multimodal_max_length=32768,
             trust_remote_code=True,
-            load_in_8bit=True,
+            load_in_4bit=True,
         ).eval()
         self.text_tokenizer = self.model.get_text_tokenizer()
         self.visual_tokenizer = self.model.get_visual_tokenizer()

@@ -13,29 +13,15 @@ from PIL import Image, ImageStat
 from tqdm.auto import tqdm
 from ultralytics.utils.ops import segment2box
 
-from .general import parallel
+from .detection_helpers import (
+    index_detection,
+    load_detections,
+    load_detections_from_arrays,
+    xyxy_to_mask,
+)
+from .general import create_dataset_yaml, parallel
 from .image_helpers import add_bounding_box, add_label, add_mask, resize_image
-
-
-def load_pickle(path: str | Path, filename: str = "classification.pickle"):
-    path = Path(path)
-
-    if not (path / filename).exists():
-        return defaultdict(dict)
-
-    with open(path / filename, "rb") as f:
-        return defaultdict(dict, pickle.load(f))
-
-
-def save_pickle(data, path: str | Path, filename: str = "classification.pickle"):
-    path = Path(path)
-
-    print(f"Saving {len(data)} images to {str(path / filename)}")
-
-    with open(path / filename, "wb") as f:
-        pickle.dump(data, f)
-
-    print(f"Saved classification file.")
+from .pickle_helpers import load_pickle, save_pickle
 
 
 def segmentation_to_xyxy(image: Image.Image, single_segmentation: list[float]):
@@ -82,24 +68,6 @@ def xyxy_to_xywh(image: Image.Image, xyxy: list[float]) -> list[float]:
     return [x_center, y_center, width, height]
 
 
-def xyxy_to_mask(
-    image: Image.Image, xyxy: list[float], buffer_px: int = 4
-) -> np.ndarray:
-    """Convert xyxy boxes to mask."""
-    width, height = image.size
-    mask = np.zeros((height, width), dtype=bool)
-    x1, y1, x2, y2 = xyxy
-    x1, y1, x2, y2 = (
-        max(0, x1 - buffer_px),
-        max(0, y1 - buffer_px),
-        min(width, x2 + buffer_px),
-        min(height, y2 + buffer_px),
-    )
-
-    mask[int(y1) : int(y2), int(x1) : int(x2)] = True
-    return mask
-
-
 def xywh_to_xyxy(image: Image.Image, xywh: list[float]) -> list[float]:
     """Convert x_center, y_center, width, height to xyxy boxes."""
     w, h = image.size
@@ -133,17 +101,6 @@ def parse_response(response: str) -> list[dict[str, str | float]]:
             raise ValueError(f"Found JSON but couldn't parse it: {cleaned_response}")
     else:
         raise ValueError(f"No JSON found in the response: {response}")
-
-
-def create_dataset_yaml(path: Path, classes: list[str]):
-    data = {
-        "train": "train/images",
-        "val": "valid/images",
-        "path": path.name,
-        "nc": len(classes),
-        "names": classes,
-    }
-    yaml.dump(data, open(path / "data.yaml", "w"))
 
 
 def resize_to_min_dimension(image: Image.Image, min_size: int):

@@ -44,3 +44,12 @@ def create_dataset_yaml(path: Path, classes: list[str]):
         "names": classes,
     }
     yaml.dump(data, open(path / "data.yaml", "w"))
+
+
+def get_image_paths(root_dir: Path) -> list[Path]:
+    return list(root_dir.glob("images/*"))
+
+
+def get_box_key(box: list[float]) -> str:
+    """Convert a list of floats to a string of floats"""
+    return " ".join([f"{x:.6f}" for x in box])

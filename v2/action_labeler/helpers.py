@@ -27,15 +27,11 @@ def image_to_detections(image_path: Path, model: IVisionLanguageModel) -> sv.Det
         return sv.Detections.empty()
 
     xywhs = [detection[1:] for detection in detections]
-    xyxys = [xywh_to_xyxy(image, xywh) for xywh in xywhs]
-    mask = [xyxy_to_mask(image, xyxy) for xyxy in xyxys]
+    xyxys = [xywh_to_xyxy(xywh, image.size) for xywh in xywhs]
+    mask = [xyxy_to_mask(xyxy, image.size) for xyxy in xyxys]
 
     return sv.Detections(
         xyxy=np.array(xyxys),
         mask=np.array(mask).astype(bool),
         class_id=np.array([0] * len(xyxys)),
     )
-
-
-def get_image_paths(folder: Path) -> list[Path]:
-    return list(folder.glob("images/*"))

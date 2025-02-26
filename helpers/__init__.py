@@ -11,6 +11,7 @@ from .detection_helpers import (
     index_detection,
     load_detections,
     load_detections_from_arrays,
+    segmentation_to_box,
     txt_to_xywh,
     xywh_to_xyxy,
     xyxy_to_mask,
@@ -18,8 +19,10 @@ from .detection_helpers import (
 from .general import create_dataset_yaml, get_box_key, parallel
 from .image_helpers import (
     add_bounding_box,
+    add_bounding_boxes,
     add_label,
     add_mask,
+    add_segmentation_masks,
     get_image_folders,
     resize_image,
 )

@@ -54,6 +54,38 @@ def xyxy_to_mask(
     return mask
 
 
+def segmentation_to_box(
+    segmentation_points: list[float],
+) -> tuple[float, float, float, float]:
+    """
+    Convert segmentation points to a normalized bounding box in xywh format.
+
+    Args:
+        segmentation_points (list[float]): A list of segmentation points in normalized coordinates
+                                           [x1, y1, x2, y2, ..., xn, yn].
+
+    Returns:
+        tuple: A tuple representing the bounding box (x_center, y_center, width, height) in normalized coordinates.
+    """
+    # Extract x and y coordinates
+    x_coords = segmentation_points[::2]
+    y_coords = segmentation_points[1::2]
+
+    # Calculate the minimum and maximum coordinates
+    x_min = min(x_coords)
+    x_max = max(x_coords)
+    y_min = min(y_coords)
+    y_max = max(y_coords)
+
+    # Compute the center coordinates, width, and height
+    x_center = (x_min + x_max) / 2
+    y_center = (y_min + y_max) / 2
+    width = x_max - x_min
+    height = y_max - y_min
+
+    return x_center, y_center, width, height
+
+
 def load_detections(txt_path: Path | str, image_size: tuple[int, int]) -> sv.Detections:
     txt_path = Path(txt_path)
     xywhs = txt_to_xywh(txt_path)

@@ -15,9 +15,10 @@ def txt_to_xywh(txt_path: Path | str) -> list[list[float]]:
     Returns:
         list[list[float]]: A list of xywh boxes.
     """
+    txt_path = Path(txt_path)
     return [
         [float(num) for num in line.split(" ")][1:]  # Skip the class id
-        for line in txt_path.read_text().split("\n")
+        for line in txt_path.read_text().splitlines()
         if line
     ]
 

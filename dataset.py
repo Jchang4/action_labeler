@@ -175,11 +175,14 @@ class Dataset:
 
         return self
 
-    def delete_classes(self, classes: list[str]) -> "Dataset":
+    def delete_classes(
+        self, classes: list[str], remove_images: bool = True
+    ) -> "Dataset":
         """Delete classes from the dataset
 
         Args:
             classes (list[str]): list of classes to delete
+            remove_images (bool, optional): whether to remove images that have the deleted classes or just the rows. Only set this to True for "none" or "background" classes. Defaults to True.
         """
         if not classes:
             return self
@@ -187,13 +190,19 @@ class Dataset:
         # Ensure all classes exists in self.classes
         self._assert_classes_exist(classes)
 
-        # If an image_path has a deleted class, remove the image_path and all its rows.
-        image_paths_to_delete = self.df[self.df["class_name"].isin(classes)][
-            "image_path"
-        ].unique()
-        self.df = self.df[
-            ~self.df["image_path"].isin(image_paths_to_delete)
-        ].reset_index(drop=True)
+        if remove_images:
+            # If an image_path has a deleted class, remove the image_path and all its rows.
+            image_paths_to_delete = self.df[self.df["class_name"].isin(classes)][
+                "image_path"
+            ].unique()
+            self.df = self.df[
+                ~self.df["image_path"].isin(image_paths_to_delete)
+            ].reset_index(drop=True)
+        else:
+            # If an image_path has a deleted class, remove the rows that have the deleted class.
+            self.df = self.df[~self.df["class_name"].isin(classes)].reset_index(
+                drop=True
+            )
 
         # Class remap to remove gaps in class ids
         new_classes = sorted(set(self.classes) - set(classes))

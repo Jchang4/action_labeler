@@ -1,26 +1,28 @@
 import json
-import pickle
 import re
-from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import supervision as sv
-import yaml
-from PIL import Image, ImageStat
-from tqdm.auto import tqdm
+from PIL import Image
 from ultralytics.utils.ops import segment2box
 
 from .detection_helpers import (
     index_detection,
     load_detections,
     load_detections_from_arrays,
+    txt_to_xywh,
+    xywh_to_xyxy,
     xyxy_to_mask,
 )
-from .general import create_dataset_yaml, parallel
-from .image_helpers import add_bounding_box, add_label, add_mask, resize_image
+from .general import create_dataset_yaml, get_box_key, parallel
+from .image_helpers import (
+    add_bounding_box,
+    add_label,
+    add_mask,
+    get_image_folders,
+    resize_image,
+)
 from .pickle_helpers import load_pickle, save_pickle
 
 
@@ -66,17 +68,6 @@ def xyxy_to_xywh(image: Image.Image, xyxy: list[float]) -> list[float]:
     width = (xyxy[2] - xyxy[0]) / w
     height = (xyxy[3] - xyxy[1]) / h
     return [x_center, y_center, width, height]
-
-
-def xywh_to_xyxy(image: Image.Image, xywh: list[float]) -> list[float]:
-    """Convert x_center, y_center, width, height to xyxy boxes."""
-    w, h = image.size
-    x_center, y_center, width, height = xywh
-    x1 = (x_center - width / 2) * w
-    y1 = (y_center - height / 2) * h
-    x2 = (x_center + width / 2) * w
-    y2 = (y_center + height / 2) * h
-    return [x1, y1, x2, y2]
 
 
 def get_detection(xyxy: list[list[float]], mask: list[list[float]]):

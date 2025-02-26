@@ -9,8 +9,19 @@ import yaml
 from PIL import Image
 from tqdm.auto import tqdm
 
-from .helpers import get_detection, xywh_to_xyxy, xyxy_to_mask
-from .preprocessors import BoxImagePreprocessor
+from .helpers import (
+    add_bounding_box,
+    get_detection,
+    index_detection,
+    txt_to_xywh,
+    xywh_to_xyxy,
+    xyxy_to_mask,
+)
+
+
+def image_to_labels_path(image_path: Path) -> Path:
+    folder = image_path.parent.parent / "labels"
+    return folder / image_path.with_suffix(".txt").name
 
 
 class Dataset:
@@ -33,20 +44,20 @@ class Dataset:
 
             for image_path in images_path.iterdir():
                 # Skip missing label txt file
-                label_path = labels_path / f"{image_path.stem}.txt"
+                label_path = labels_path / image_path.with_suffix(".txt").name
                 if not label_path.exists():
                     print(f"Skipping {image_path.stem}")
                     continue
 
                 raw_labels = [
-                    line.strip().split(" ")
-                    for line in label_path.read_text().splitlines()
+                    [float(num) for num in line.split(" ")]
+                    for line in label_path.read_text().split("\n")
                     if line
                 ]
 
                 for raw_label in raw_labels:
                     class_id = int(raw_label[0])
-                    xywh = " ".join(raw_label[1:])
+                    xywh = " ".join([str(f) for f in raw_label[1:]])
                     data.append(
                         {
                             "dataset": dataset,
@@ -110,7 +121,9 @@ class Dataset:
         yaml.dump(data, (output_folder / "data.yaml").open("w"))
 
         # Save images and labels
-        for _, row in tqdm(self.df.iterrows(), total=len(self.df)):
+        for _, row in tqdm(
+            self.df.iterrows(), total=len(self.df), desc="Saving Dataset"
+        ):
             image_path = (
                 output_folder / row["dataset"] / "images" / Path(row["image_path"]).name
             )
@@ -123,7 +136,7 @@ class Dataset:
 
             shutil.copy(row["image_path"], image_path)
 
-            if row["class_name"] == "none":
+            if row["class_name"] == "none" or row["class_name"] == "background":
                 continue
 
             label = f"{row['class_id']} {row['xywh']}"
@@ -145,15 +158,16 @@ class Dataset:
         )
 
         new_classes = sorted(
-            set(self.classes) - set(class_map.keys()) | set(class_map.values())
+            (set(self.classes) - set(class_map.keys())) | set(class_map.values())
         )
         old_to_new_class_id = {
-            c: new_classes.index(class_map.get(c, c)) for c in self.classes
+            i: new_classes.index(class_map.get(c, c))
+            for i, c in enumerate(self.classes)
         }
         old_to_new_class_name = {c: class_map.get(c, c) for c in self.classes}
 
         # Update class ids
-        self.df["class_id"] = self.df["class_name"].map(old_to_new_class_id)
+        self.df["class_id"] = self.df["class_id"].map(old_to_new_class_id)
         self.df["class_name"] = self.df["class_name"].map(old_to_new_class_name)
         self.classes = new_classes
 
@@ -167,20 +181,30 @@ class Dataset:
         Args:
             classes (list[str]): list of classes to delete
         """
+        if not classes:
+            return self
+
         # Ensure all classes exists in self.classes
         self._assert_classes_exist(classes)
 
-        # Filter out classes
-        self.df = self.df[~self.df["class_name"].isin(classes)].reset_index(drop=True)
+        # If an image_path has a deleted class, remove the image_path and all its rows.
+        image_paths_to_delete = self.df[self.df["class_name"].isin(classes)][
+            "image_path"
+        ].unique()
+        self.df = self.df[
+            ~self.df["image_path"].isin(image_paths_to_delete)
+        ].reset_index(drop=True)
 
         # Class remap to remove gaps in class ids
         new_classes = sorted(set(self.classes) - set(classes))
-        old_to_new_class_id = {c: new_classes.index(c) for c in new_classes}
-        old_to_new_class_name = {c: c for c in new_classes}
+        old_to_new_class_id = {
+            i: new_classes.index(c)
+            for i, c in enumerate(self.classes)
+            if c in new_classes
+        }
 
         # Update class ids
-        self.df["class_name"] = self.df["class_name"].map(old_to_new_class_name)
-        self.df["class_id"] = self.df["class_name"].map(old_to_new_class_id)
+        self.df["class_id"] = self.df["class_id"].map(old_to_new_class_id)
         self.classes = new_classes
 
         self._remove_empty_classes()
@@ -203,16 +227,55 @@ class Dataset:
 
         return self
 
-    def get_balanced_dataset(self, num_samples: Optional[int] = None) -> "Dataset":
-        """Get a balanced dataset with `num_samples` samples for each class"""
+    def get_balanced_dataset(
+        self,
+        num_samples: Optional[int] = None,
+        upsample_classes: Optional[dict] = None,
+    ) -> "Dataset":
+        """Balance the dataset by number of samples per class."""
         if num_samples is None:
             num_samples = self.df["class_name"].value_counts().min()
+        if upsample_classes is None:
+            upsample_classes = {}
 
-        balanced_df = (
-            self.df.groupby("class_name")
-            .apply(lambda x: x.sample(min(num_samples, len(x))))
-            .reset_index(drop=True)
-        )
+        # Create empty copy of self.df
+        balanced_df = pd.DataFrame(columns=self.df.columns)
+
+        # Select classes based on least to most samples
+        classes_by_samples = {}
+        for class_name in self.df["class_name"].unique():
+            classes_by_samples[class_name] = self.df[
+                self.df["class_name"] == class_name
+            ].shape[0]
+        min_num_samples = min(classes_by_samples.values())
+        for class_name in self.df["class_name"].unique():
+            classes_by_samples[class_name] = min(
+                int(min_num_samples * upsample_classes.get(class_name, 1)),
+                classes_by_samples[class_name],
+            )
+
+        # Get images for each class
+        for class_name, num_samples in tqdm(
+            sorted(classes_by_samples.items(), key=lambda x: x[1]),
+            desc="Balancing Dataset",
+        ):
+            # Subtract the number of images already in the balanced_df for this class
+            num_samples -= balanced_df[balanced_df["class_name"] == class_name].shape[0]
+            # Don't grab images that are already in the balanced_df
+            valid_df = self.df[~self.df["image_path"].isin(balanced_df["image_path"])]
+            # Find the valid image_paths
+            image_paths = valid_df[valid_df["class_name"] == class_name][
+                "image_path"
+            ].unique()
+            # Sample num_samples images
+            image_paths = np.random.choice(
+                image_paths, min(num_samples, len(image_paths)), replace=False
+            )
+            # Add sampled images to balanced_df
+            for image_path in image_paths:
+                balanced_df = pd.concat(
+                    [balanced_df, valid_df[valid_df["image_path"] == image_path]]
+                )
 
         # Set train and valid dataset based on image path
         # An image path should only be in one dataset
@@ -250,7 +313,6 @@ class Dataset:
 
     def plot_dataset(self, num_images: int = 5) -> "Dataset":
         """Plot N images for each class from the dataset with bounding boxes"""
-        box_annotator = BoxImagePreprocessor()
 
         for class_name in self.classes:
             class_df = self.df[self.df["class_name"] == class_name]
@@ -272,7 +334,7 @@ class Dataset:
                 xyxys = [xywh_to_xyxy(image, list(map(float, row["xywh"].split(" "))))]
                 masks = [xyxy_to_mask(image, xyxy) for xyxy in xyxys]
                 detections = get_detection(xyxys, masks)
-                image = box_annotator.preprocess(image, 0, detections)
+                image = add_bounding_box(image, index_detection(detections, 0))
 
                 ax.imshow(image)
                 ax.axis("off")
@@ -307,9 +369,39 @@ class Dataset:
 
     def _remove_empty_classes(self):
         empty_classes = set(self.classes) - set(self.df["class_name"].unique())
-        if not empty_classes:
-            return
         self.delete_classes(list(empty_classes))
+
+    def add_background_images(
+        self, background_dir: Path, percent_background: float
+    ) -> "Dataset":
+        """Add background images to the dataset"""
+        background_images = list((background_dir / "images").iterdir())
+        num_images_to_add = int(
+            self.df.value_counts("class_name").min() * percent_background
+        )
+
+        # Sample random background images
+        background_images = np.random.choice(
+            background_images,
+            min(num_images_to_add, len(background_images)),
+            replace=False,
+        )
+
+        # Add background images to the dataset
+        data = []
+        for background_image in background_images:
+            dataset = "train" if np.random.rand() < 0.8 else "valid"
+            data.append(
+                {
+                    "dataset": dataset,
+                    "image_path": str(background_image),
+                    "class_name": "background",
+                    "class_id": -1,
+                    "xywh": "",
+                }
+            )
+        self.df = pd.concat([self.df, pd.DataFrame(data)]).reset_index(drop=True)
+        return self
 
 
 def _remake_dataset_dir(folder: Path):

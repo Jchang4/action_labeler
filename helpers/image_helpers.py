@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import supervision as sv
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 
 def get_image_folders(root_dir: Path, exclude_filters: list[str] = []) -> list[Path]:
@@ -180,3 +180,82 @@ def add_segmentation_masks(
     combined = Image.alpha_composite(image, overlay)
 
     return combined
+
+
+def add_text(
+    image: Image.Image,
+    boxes: list[list[float]],
+    texts: list[str] | None = None,
+    text_position: str = "top",
+    font_path: str | None = None,
+    font_size: int = 20,
+    text_color: str | tuple[int, int, int] = "red",
+):
+    """
+    Add text labels to an image at specified bounding box locations.
+
+    Args:
+        image (PIL.Image.Image): The original image.
+        boxes (list[list[float]]): A list of bounding boxes, each defined by [x_center, y_center, width, height]
+                                   with normalized values (0 to 1).
+        texts (list[str], optional): A list of text labels corresponding to each bounding box. If None, indices are used.
+        text_position (str): Position of the text relative to the bounding box ('top' or 'bottom'). Default is 'top'.
+        font_path (str, optional): Path to the TrueType font file to use. If None, the default font is used.
+        font_size (int): Size of the font. Default is 20.
+        text_color (str or tuple): Color of the text. Default is 'red'.
+
+    Returns:
+        PIL.Image.Image: The image with text labels added.
+    """
+    draw = ImageDraw.Draw(image)
+    img_width, img_height = image.size
+
+    # Load the specified font or default to a basic font
+    if font_path:
+        font = ImageFont.truetype(font_path, font_size)
+    else:
+        font = ImageFont.load_default(font_size)
+
+    if texts is None:
+        # Generate default text labels as indices starting from 1
+        texts = [str(i + 1) for i in range(len(boxes))]
+
+    for box, text in zip(boxes, texts):
+        x_center, y_center, box_width, box_height = box
+        # Convert normalized coordinates to absolute pixel values
+        x_center *= img_width
+        y_center *= img_height
+        box_width *= img_width
+        box_height *= img_height
+
+        # Calculate the top-left and bottom-right coordinates of the bounding box
+        left = x_center - box_width / 2
+        top = y_center - box_height / 2
+        bottom = y_center + box_height / 2
+
+        # Determine text size using textbbox
+        text_bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = (text_bbox[3] - text_bbox[1]) * 1.5
+
+        # Determine text position
+        if text_position == "top":
+            text_x = left
+            text_y = top
+            # text_y = text_height + text_height * 0.25  # Slightly above the bounding box
+        elif text_position == "bottom":
+            text_x = left
+            text_y = bottom - text_height
+        else:
+            raise ValueError("text_position must be 'top' or 'bottom'")
+
+        # Draw text background for better visibility
+        draw.rectangle(
+            [text_x, text_y, text_x + text_width, text_y + text_height],
+            fill=(0, 0, 0, 128),  # Semi-transparent black background
+        )
+
+        # Draw the text
+        draw.text((text_x, text_y), text, font=font, fill=text_color)
+
+    return image

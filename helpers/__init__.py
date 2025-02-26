@@ -23,6 +23,7 @@ from .image_helpers import (
     add_label,
     add_mask,
     add_segmentation_masks,
+    add_text,
     get_image_folders,
     resize_image,
 )

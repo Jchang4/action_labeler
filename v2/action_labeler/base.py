@@ -6,7 +6,12 @@ from PIL import Image
 from supervision.detection.core import Detections
 from tqdm.auto import tqdm
 
-from action_labeler.helpers import load_pickle, save_pickle, xyxy_to_xywh
+from action_labeler.helpers import (
+    get_image_paths,
+    load_pickle,
+    save_pickle,
+    xyxy_to_xywh,
+)
 from action_labeler.v2.base import (
     IActionLabeler,
     IFilter,
@@ -15,7 +20,8 @@ from action_labeler.v2.base import (
     IVisionLanguageModel,
 )
 
-from .helpers import get_image_paths, image_to_detect_path, image_to_detections
+from .action_labeler_dataset import ActionLabelDataset
+from .helpers import image_to_detect_path, image_to_detections
 
 
 class BaseActionLabeler(IActionLabeler):
@@ -25,6 +31,7 @@ class BaseActionLabeler(IActionLabeler):
     filters: list[IFilter]
     preprocessors: list[IPreprocessor]
     results: dict[str, dict[str, list[dict[str, str]]]]
+    labels: ActionLabelDataset
 
     # Options
     verbose: bool = False
@@ -48,6 +55,8 @@ class BaseActionLabeler(IActionLabeler):
         self.filters = filters
         self.preprocessors = preprocessors
         self.results = load_pickle(folder, filename=save_filename)
+        self.labels = ActionLabelDataset(dataset_path=folder, file_name=save_filename)
+
         # Options
         self.verbose = verbose
         self.save_every = save_every
@@ -155,6 +164,8 @@ class BaseActionLabeler(IActionLabeler):
             self.folder,
             filename=self.save_filename,
         )
+
+        # self.labels.save()
 
     def show_prediction(self, images: list[Image.Image], prediction: str):
         # Display images in a horizontal row

@@ -18,7 +18,7 @@ class Gpt4oMini(BaseVisionLanguageModel):
         self.max_tokens = max_tokens
         self.sleep_time = sleep_time
 
-    def predict(self, images: list[Image.Image], prompt: str) -> str:
+    def predict(self, prompt: str, images: list[Image.Image]) -> str:
         images = [
             image.convert("RGB") if image.mode != "RGB" else image for image in images
         ]
@@ -53,4 +53,4 @@ class Gpt4oMini(BaseVisionLanguageModel):
         )
 
         sleep(self.sleep_time)
-        return response.choices[0].message.content.replace("action: ", "").strip()
+        return response.choices[0].message.content.strip()

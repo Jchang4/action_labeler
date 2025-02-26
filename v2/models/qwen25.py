@@ -57,11 +57,11 @@ class Qwen25VL(BaseVisionLanguageModel):
         # Inference: Generation of the output
         generated_ids = self.model.generate(
             **inputs,
-            max_new_tokens=2048,
-            do_sample=True,
-            temperature=0.15,
-            top_p=0.95,
-            top_k=60,
+            max_new_tokens=4096,
+            # do_sample=True,
+            # temperature=0.15,
+            # top_p=0.95,
+            # top_k=60,
         )
         generated_ids_trimmed = [
             out_ids[len(in_ids) :]

@@ -3,7 +3,13 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image, ImageDraw
 
-from action_labeler.helpers import resize_image, xywh_to_xyxy
+from action_labeler.helpers import (
+    add_bounding_boxes,
+    add_segmentation_masks,
+    resize_image,
+    segmentation_to_box,
+    xywh_to_xyxy,
+)
 
 colors = [
     "red",
@@ -78,6 +84,20 @@ class ActionLabelDataset:
     def drop_classes(self, classes: list[str]) -> None:
         self.df = self.df[~self.df["action"].isin(classes)]
 
+    @staticmethod
+    def convert_segments_to_xywh(df: pd.DataFrame) -> pd.DataFrame:
+        assert "xywh" in df.columns, "xywh column must exist"
+        df["xywh"] = df["xywh"].apply(
+            lambda x: (
+                ActionLabelDataset.xywh_to_str(
+                    segmentation_to_box(ActionLabelDataset.str_to_xywh(x))
+                )
+                if len(x.split(" ")) > 4
+                else x
+            )
+        )
+        return df
+
     def does_row_exist(self, image_path: Path, xywh: list[float]) -> bool:
         xywh_str = self.xywh_to_str(xywh)
         return (
@@ -90,9 +110,8 @@ class ActionLabelDataset:
 
     @staticmethod
     def xywh_to_str(xywh: list[float]) -> str:
-        assert len(xywh) == 4, "xywh must be a list of 4 floats"
         assert all([0.0 <= n <= 1.0 for n in xywh]), "xywh must be between 0 and 1"
-        return f"{xywh[0]:.6f} {xywh[1]:.6f} {xywh[2]:.6f} {xywh[3]:.6f}"
+        return " ".join([f"{n:.6f}" for n in xywh])
 
     @staticmethod
     def str_to_xywh(xywh_str: str) -> list[float]:
@@ -102,17 +121,25 @@ class ActionLabelDataset:
     def sanitize_action(action: str) -> str:
         return action.replace("action:", "").strip()
 
-    def show_class(self, class_name: str, num_samples: int = 5) -> None:
+    def show_class(
+        self, class_name: str, num_samples: int = 5, detect_type: str = "bbox"
+    ) -> None:
         """Plot a class from the dataset with bounding boxes"""
+        assert detect_type in [
+            "bbox",
+            "segment",
+        ], "detect_type must be 'bbox' or 'segment'"
+
         df = self.df[self.df["action"] == class_name]
         print("Number of samples:", len(df))
         for _, row in df.sample(min(num_samples, len(df)), replace=False).iterrows():
             image = Image.open(row["image_path"])
             image = resize_image(image, 640)
             xywh = self.str_to_xywh(row["xywh"])
-            xyxy = xywh_to_xyxy(xywh, image.size)
-            draw = ImageDraw.Draw(image)
-            draw.rectangle(xyxy, outline="red", width=2)
+            if detect_type == "bbox":
+                image = add_bounding_boxes(image, [xywh], width=2)
+            elif detect_type == "segment":
+                image = add_segmentation_masks(image, [segmentation_to_box(xywh)])
             print(row["image_path"])
             image.show()
 

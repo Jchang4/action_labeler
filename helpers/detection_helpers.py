@@ -19,7 +19,7 @@ def txt_to_xywh(txt_path: Path | str) -> list[list[float]]:
     return [
         [float(num) for num in line.split(" ")][1:]  # Skip the class id
         for line in txt_path.read_text().splitlines()
-        if line
+        if line and len(line.split(" ")) > 1
     ]
 
 

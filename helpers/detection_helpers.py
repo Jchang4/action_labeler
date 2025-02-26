@@ -4,6 +4,24 @@ import numpy as np
 import supervision as sv
 
 
+def txt_to_xywh(txt_path: Path | str) -> list[list[float]]:
+    """Convert a txt file to a list of xywh boxes.
+
+    Note: this method can also handle segmentation and keypoint detection.
+
+    Args:
+        txt_path (Path | str): The path to the txt file.
+
+    Returns:
+        list[list[float]]: A list of xywh boxes.
+    """
+    return [
+        [float(num) for num in line.split(" ")][1:]  # Skip the class id
+        for line in txt_path.read_text().split("\n")
+        if line
+    ]
+
+
 def xywh_to_xyxy(xywh: list[float], image_size: tuple[int, int]) -> list[float]:
     x_center = xywh[0] * image_size[0]
     y_center = xywh[1] * image_size[1]
@@ -38,12 +56,7 @@ def xyxy_to_mask(
 
 def load_detections(txt_path: Path | str, image_size: tuple[int, int]) -> sv.Detections:
     txt_path = Path(txt_path)
-    xywhs = [
-        # Skip the class id
-        [float(num) for num in line.split(" ")][1:]
-        for line in txt_path.read_text().split("\n")
-        if line
-    ]
+    xywhs = txt_to_xywh(txt_path)
     xyxys = [xywh_to_xyxy(xywh, image_size) for xywh in xywhs]
     masks = [xyxy_to_mask(xyxy, image_size) for xyxy in xyxys]
     return sv.Detections(

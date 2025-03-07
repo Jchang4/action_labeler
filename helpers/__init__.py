@@ -28,6 +28,7 @@ from .image_helpers import (
     resize_image,
 )
 from .pickle_helpers import load_pickle, save_pickle
+from .plot import plot_images
 
 
 def segmentation_to_xyxy(image: Image.Image, single_segmentation: list[float]):

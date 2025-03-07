@@ -239,52 +239,53 @@ class Dataset:
     def get_balanced_dataset(
         self,
         num_samples: Optional[int] = None,
-        upsample_classes: Optional[dict] = None,
+        upsample_classes: Optional[dict[str, float]] = None,
     ) -> "Dataset":
         """Balance the dataset by number of samples per class."""
-        if num_samples is None:
-            num_samples = self.df["class_name"].value_counts().min()
         if upsample_classes is None:
             upsample_classes = {}
 
-        # Create empty copy of self.df
         balanced_df = pd.DataFrame(columns=self.df.columns)
+        count_per_class = {c: 0 for c in self.df["class_name"].unique()}
+        num_samples = (
+            num_samples
+            if num_samples is not None
+            else self.df.value_counts("class_name").min()
+        )
 
-        # Select classes based on least to most samples
-        classes_by_samples = {}
-        for class_name in self.df["class_name"].unique():
-            classes_by_samples[class_name] = self.df[
-                self.df["class_name"] == class_name
-            ].shape[0]
-        min_num_samples = min(classes_by_samples.values())
-        for class_name in self.df["class_name"].unique():
-            classes_by_samples[class_name] = min(
-                int(min_num_samples * upsample_classes.get(class_name, 1)),
-                classes_by_samples[class_name],
+        # Start with the class with the least samples
+        # Add unique images until the class has `num_samples`
+        for class_name in reversed(self.df["class_name"].value_counts().index.tolist()):
+            max_num_samples = int(num_samples * upsample_classes.get(class_name, 1.0))
+
+            class_df = self.df[
+                (self.df["class_name"] == class_name)
+                & (~self.df["image_path"].isin(balanced_df["image_path"]))
+            ]
+
+            curr_image_paths = class_df["image_path"].unique()
+            np.random.shuffle(curr_image_paths)
+
+            new_image_paths = set()
+            for curr_image_path in curr_image_paths:
+                for cls, count in (
+                    self.df[self.df["image_path"] == curr_image_path]["class_name"]
+                    .value_counts()
+                    .items()
+                ):
+                    count_per_class[cls] += count
+
+                new_image_paths.add(curr_image_path)
+
+                if count_per_class[class_name] >= max_num_samples:
+                    break
+
+            balanced_df = pd.concat(
+                [balanced_df, self.df[self.df["image_path"].isin(new_image_paths)]]
             )
 
-        # Get images for each class
-        for class_name, num_samples in tqdm(
-            sorted(classes_by_samples.items(), key=lambda x: x[1]),
-            desc="Balancing Dataset",
-        ):
-            # Subtract the number of images already in the balanced_df for this class
-            num_samples -= balanced_df[balanced_df["class_name"] == class_name].shape[0]
-            # Don't grab images that are already in the balanced_df
-            valid_df = self.df[~self.df["image_path"].isin(balanced_df["image_path"])]
-            # Find the valid image_paths
-            image_paths = valid_df[valid_df["class_name"] == class_name][
-                "image_path"
-            ].unique()
-            # Sample num_samples images
-            image_paths = np.random.choice(
-                image_paths, min(num_samples, len(image_paths)), replace=False
-            )
-            # Add sampled images to balanced_df
-            for image_path in image_paths:
-                balanced_df = pd.concat(
-                    [balanced_df, valid_df[valid_df["image_path"] == image_path]]
-                )
+        balanced_df.drop_duplicates(keep="first", inplace=True)
+        balanced_df.reset_index(drop=True, inplace=True)
 
         # Set train and valid dataset based on image path
         # An image path should only be in one dataset

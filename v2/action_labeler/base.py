@@ -6,12 +6,7 @@ from PIL import Image
 from supervision.detection.core import Detections
 from tqdm.auto import tqdm
 
-from action_labeler.helpers import (
-    get_image_paths,
-    load_pickle,
-    save_pickle,
-    xyxy_to_xywh,
-)
+from action_labeler.helpers import load_pickle, save_pickle, xyxy_to_xywh
 from action_labeler.v2.base import (
     IActionLabeler,
     IFilter,
@@ -22,6 +17,10 @@ from action_labeler.v2.base import (
 
 from .action_labeler_dataset import ActionLabelDataset
 from .helpers import image_to_detect_path, image_to_detections
+
+
+def get_image_paths(folder: Path) -> list[Path]:
+    return list((folder / "images").iterdir())
 
 
 class BaseActionLabeler(IActionLabeler):

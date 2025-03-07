@@ -55,36 +55,44 @@ def get_description_action_dataframe(
                 description = descriptions.get(str(image_path), {}).get(box, [])
                 if len(description) == 0:
                     description = None
-                else:
+                elif isinstance(description, list):
                     description = description[0]["description"]
 
-                for action in actions:
-                    action_str = ""
-                    if isinstance(action, dict) and "action" in action:
-                        action_str = action["action"]
-                    elif isinstance(action, dict):
-                        action_str = (
-                            action["description"]
-                            .replace('"', "")
-                            .replace("-", "")
-                            .replace("action:", "")
-                            .replace("action :", "")
-                            .strip()
-                        )
-                    else:
-                        action_str = action["description"].strip()
+                # for action in actions:
+                #     action_str = ""
+                #     if isinstance(action, dict) and "action" in action:
+                #         action_str = action["action"]
+                #     elif isinstance(action, dict):
+                #         action_str = (
+                #             action["description"]
+                #             .replace('"', "")
+                #             .replace("-", "")
+                #             .replace("action:", "")
+                #             .replace("action :", "")
+                #             .strip()
+                #         )
+                #     else:
+                #         action_str = action.strip()
 
-                    data.append(
-                        {
-                            "model_name": model_name,
-                            "folder": str(folder),
-                            "image_path": str(image_path),
-                            "box": box,
-                            "description": description,
-                            "action": action_str,
-                            "expected_action": expected_action,
-                        }
-                    )
+                action_str = (
+                    actions.replace('"', "")
+                    .replace("-", "")
+                    .replace("action:", "")
+                    .replace("action :", "")
+                    .strip()
+                )
+
+                data.append(
+                    {
+                        "model_name": model_name,
+                        "folder": str(folder),
+                        "image_path": str(image_path),
+                        "box": box,
+                        "description": description,
+                        "action": action_str,
+                        "expected_action": expected_action,
+                    }
+                )
 
     df = pd.DataFrame(data)
     return df

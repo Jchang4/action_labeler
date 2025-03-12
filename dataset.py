@@ -46,7 +46,7 @@ class Dataset:
                 # Skip missing label txt file
                 label_path = labels_path / image_path.with_suffix(".txt").name
                 if not label_path.exists():
-                    print(f"Skipping {image_path.stem}")
+                    # print(f"Skipping {image_path.stem}")
                     continue
 
                 raw_labels = [

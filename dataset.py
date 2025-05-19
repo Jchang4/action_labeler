@@ -339,10 +339,11 @@ class Dataset:
 
             for ax, (_, row) in zip(axes, class_df.iterrows()):
                 image = Image.open(row["image_path"])
-                image.thumbnail((480, 480))
 
-                xyxys = [xywh_to_xyxy(image, list(map(float, row["xywh"].split(" "))))]
-                masks = [xyxy_to_mask(image, xyxy) for xyxy in xyxys]
+                xyxys = [
+                    xywh_to_xyxy([float(f) for f in row["xywh"].split(" ")], image.size)
+                ]
+                masks = [xyxy_to_mask(xyxy, image.size) for xyxy in xyxys]
                 detections = get_detection(xyxys, masks)
                 image = add_bounding_box(image, index_detection(detections, 0))
 

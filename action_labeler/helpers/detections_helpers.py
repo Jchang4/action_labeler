@@ -220,9 +220,24 @@ class Detection:
             image_size=image_size,
         )
 
+    @classmethod
+    def empty(cls, image_size: tuple[int, int] = (0, 0)) -> "Detection":
+        return cls(
+            xyxy=np.array([]),
+            mask=np.array([]),
+            class_id=np.array([]),
+            image_size=image_size,
+        )
+
     @property
     def xywhn(self) -> np.ndarray:
         return np.array(xyxys_to_xywhs(self.xyxy, self.image_size))
+
+    def __str__(self):
+        return f"<Detection xyxys={len(self.xyxy)} masks={len(self.mask)} class_ids={len(self.class_id)} image_size={self.image_size}>"
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class DetectionManager:

@@ -1,0 +1,8 @@
+names:
+- laying down
+- moving
+- sitting
+- standing still
+path: dog_dataset_balanced
+train: train/images
+val: valid/images

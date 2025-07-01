@@ -1,0 +1,20 @@
+# Core dependencies (also in setup.py)
+ultralytics
+supervision
+pillow
+tqdm
+pyyaml
+numpy
+pandas
+matplotlib
+
+# Development dependencies
+jupyter
+notebook
+ipykernel
+
+# Optional AI model dependencies
+openai
+transformers
+torch
+torchvision

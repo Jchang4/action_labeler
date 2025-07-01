@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "action_labeler"
+dynamic = ["version"]
+description = "A Python package for labeling actions in images using AI models"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Justin", email = ""},
+]
+maintainers = [
+    {name = "Justin", email = ""},
+]
+keywords = [
+    "computer-vision",
+    "machine-learning", 
+    "ai",
+    "image-labeling",
+    "yolo",
+    "object-detection",
+    "action-recognition"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "ultralytics",
+    "supervision",
+    "pillow",
+    "tqdm",
+    "pyyaml",
+    "numpy",
+    "pandas",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+dev = [
+    "jupyter",
+    "notebook",
+    "ipykernel",
+]
+ai = [
+    "openai",
+    "transformers",
+    "torch",
+    "torchvision",
+]
+
+[project.urls]
+Homepage = "https://github.com/Jchang4/action_labeler"
+Documentation = "https://github.com/Jchang4/action_labeler#readme"
+Repository = "https://github.com/Jchang4/action_labeler"
+"Bug Reports" = "https://github.com/Jchang4/action_labeler/issues"
+
+[tool.setuptools]
+packages = ["action_labeler"]
+
+[tool.setuptools.dynamic]
+version = {attr = "action_labeler.__version__.__version__"}
+
+[tool.setuptools.package-data]
+action_labeler = ["py.typed"]

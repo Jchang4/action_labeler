@@ -85,6 +85,9 @@ class Detection:
             image_size=self.image_size,
         )
 
+    def is_empty(self) -> bool:
+        return len(self.xyxy) == 0
+
     @property
     def xywhn(self) -> np.ndarray:
         return np.array(xyxys_to_xywhs(self.xyxy, self.image_size))

@@ -9,10 +9,10 @@ description = "A Python package for labeling actions in images using AI models"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Justin", email = ""},
+    {name = "Justin Chang"},
 ]
 maintainers = [
-    {name = "Justin", email = ""},
+    {name = "Justin Chang"},
 ]
 keywords = [
     "computer-vision",

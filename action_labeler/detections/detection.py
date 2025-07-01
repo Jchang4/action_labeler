@@ -77,6 +77,14 @@ class Detection:
             image_size=image_size,
         )
 
+    def copy(self) -> "Detection":
+        return self.__class__(
+            xyxy=self.xyxy.copy(),
+            mask=self.mask.copy(),
+            class_id=self.class_id.copy(),
+            image_size=self.image_size,
+        )
+
     @property
     def xywhn(self) -> np.ndarray:
         return np.array(xyxys_to_xywhs(self.xyxy, self.image_size))

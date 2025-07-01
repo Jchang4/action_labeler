@@ -1,8 +1,24 @@
-import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from action_labeler.detections.detection import Detection
+
+
+def resize_image(image: Image.Image, size: int) -> Image.Image:
+    """Resize the image while preserving aspect ratio.
+
+    Args:
+        image (PIL.Image.Image): The image to resize.
+        size (int): The size to resize to. The larger dimension will be equal to `size`.
+
+    Returns:
+        PIL.Image.Image: The resized image.
+    """
+    width, height = image.size
+    scale_factor = size / max(width, height)
+    new_width = int(width * scale_factor)
+    new_height = int(height * scale_factor)
+    return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
 
 def add_bounding_box(
@@ -11,11 +27,18 @@ def add_bounding_box(
     detections: Detection,
     color: str = "red",
     width: int = 2,
+    buffer_px: int = 0,
 ) -> Image.Image:
     image = image.copy()
 
     draw = ImageDraw.Draw(image)
     xyxy = detections.xyxy[index]
+    xyxy = (
+        max(0, xyxy[0] - buffer_px),
+        max(0, xyxy[1] - buffer_px),
+        min(image.width, xyxy[2] + buffer_px),
+        min(image.height, xyxy[3] + buffer_px),
+    )
     draw.rectangle(xyxy, outline=color, width=width)
     return image
 
@@ -25,9 +48,10 @@ def add_bounding_boxes(
     detections: Detection,
     color: str = "red",
     width: int = 2,
+    buffer_px: int = 0,
 ) -> Image.Image:
     for index in range(len(detections.xyxy)):
-        image = add_bounding_box(image, index, detections, color, width)
+        image = add_bounding_box(image, index, detections, color, width, buffer_px)
     return image
 
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from action_labeler.helpers import Detection
+from action_labeler.detections.detection import Detection
 
 from .base import BasePrompt
 

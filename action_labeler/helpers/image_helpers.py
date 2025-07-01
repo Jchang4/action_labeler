@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from action_labeler.helpers import Detection
+from action_labeler.detections.detection import Detection
 
 
 def add_bounding_box(

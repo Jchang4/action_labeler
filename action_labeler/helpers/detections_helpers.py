@@ -120,29 +120,14 @@ def xywhs_to_xyxys(
     return [xywh_to_xyxy(xywh, image_size) for xywh in xywhs]
 
 
-def xywh_to_mask(
-    xywh: tuple[float, float, float, float], image_size: tuple[int, int]
-) -> list[int]:
-    pass
-
-
 def xyxy_to_mask(
-    xyxy: tuple[float, float, float, float],
+    xyxy: list[float],
     image_size: tuple[int, int],
     buffer_px: int = 0,
-) -> list[list[bool]]:
-    """Convert xyxy boxes to a mask.
-
-    Args:
-        xyxy (tuple[float, float, float, float]): The xyxy coordinates.
-        image_size (tuple[int, int]): The size of the image as (width, height).
-        buffer_px (int, optional): The buffer in pixels. Defaults to 0.
-
-    Returns:
-        list[list[bool]]: The mask.
-    """
+) -> np.ndarray:
+    """Convert xyxy boxes to mask."""
     width, height = image_size
-    mask = np.full((width, height), False, dtype=bool)
+    mask = np.zeros((width, height), dtype=bool)
     x1, y1, x2, y2 = xyxy
     x1, y1, x2, y2 = (
         max(0, x1 - buffer_px),
@@ -152,7 +137,7 @@ def xyxy_to_mask(
     )
 
     mask[int(x1) : int(x2), int(y1) : int(y2)] = True
-    return mask.tolist()
+    return mask
 
 
 def xyxys_to_masks(
@@ -175,7 +160,7 @@ def xyxys_to_masks(
 
 class Detection:
     xyxy: np.ndarray
-    mask: np.ndarray | None
+    mask: np.ndarray
     class_id: np.ndarray
     image_size: tuple[int, int]  # as (width, height)
 
@@ -194,7 +179,11 @@ class Detection:
     @classmethod
     def from_ultralytics(cls, results: Results) -> "Detection":
         xyxy = results.boxes.xyxy.cpu().numpy()
-        mask = results.masks.xy.cpu().numpy() if results.masks else None
+        mask = (
+            results.masks.xy.cpu().numpy()
+            if results.masks
+            else xyxys_to_masks(xyxy, results.orig_shape[::-1])
+        )
         class_id = results.boxes.cls.cpu().numpy()
         # Ultralytics returns image size as (height, width)
         image_size = results.orig_shape[::-1]

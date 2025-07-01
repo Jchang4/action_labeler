@@ -12,14 +12,14 @@ class TextPrompt(BasePrompt):
     No classes are used. This is similar to asking an LLM a question.
 
     Args:
-        text_prompt (str): The text prompt to return.
+        prompt (str): The text prompt to return.
     """
 
     text_prompt: str
 
-    def __init__(self, text_prompt: str):
-        super().__init__(text_prompt, classes=[], numbered_classes=False)
-        self.text_prompt = text_prompt
+    def __init__(self, prompt: str):
+        super().__init__(prompt, classes=[], numbered_classes=False)
+        self.text_prompt = prompt
 
     def prompt(
         self,

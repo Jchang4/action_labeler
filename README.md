@@ -44,31 +44,59 @@ pip install -e .
 ### Basic Usage
 
 ```python
-from action_labeler import ActionLabeler
+import os
 
-# Initialize the action labeler with a model
-labeler = ActionLabeler(model_name="your_model")
+from pathlib import Path
 
-# Process images and generate labels
-results = labeler.label_actions("path/to/images")
-```
-
-### Advanced Usage
-
-```python
-from action_labeler import ActionLabeler
-
-# Initialize with specific model configuration
-labeler = ActionLabeler(
-    model_name="gpt-4-vision",
-    # Add other configuration options as needed
+from action_labeler.prompt import ActionPrompt
+from action_labeler.models.llama_cpp import LlamaCpp
+from action_labeler.filters import SingleDetectionFilter
+from action_labeler.preprocessors import (
+    BoundingBoxPreprocessor,
+    ResizePreprocessor,
+    CropPreprocessor,
+    TextPreprocessor,
 )
 
-# Process a single image
-result = labeler.process_image("path/to/image.jpg")
+os.environ["OPENAI_API_KEY"] = "sk-proj-1234567890"
 
-# Process multiple images
-results = labeler.process_batch(["image1.jpg", "image2.jpg"])
+ACTION_PROMPT_TEMPLATE = """
+Describe the actions of the dog in the image.
+
+Output Format:
+- Only respond with the action of the dog.
+- Do not include any other text
+- Do not provide explanations
+- If none of the actions apply, respond with "none"
+- If multiple actions apply, choose the most specific action.
+"""
+
+
+action_labeler = ActionLabeler(
+    folder=Path("./samples"),
+    prompt=ActionPrompt(
+        template=ACTION_PROMPT_TEMPLATE,
+        classes=[
+            "sitting",
+            "running",
+            "standing",
+            "walking",
+            "laying down",
+        ],
+    ),
+    model=LlamaCpp(),
+    filters=[
+        SingleDetectionFilter(),
+    ],
+    preprocessors=[
+        BoundingBoxPreprocessor(),
+        TextPreprocessor(),
+        CropPreprocessor(),
+        ResizePreprocessor(1024),
+    ],
+)
+
+action_labeler.label()
 ```
 
 ### Model Configuration

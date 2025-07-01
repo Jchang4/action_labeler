@@ -18,6 +18,14 @@ def get_image_folders(root_dir: Path, exclude_filters: list[str] = []) -> list[P
     return sorted(image_folders, key=lambda x: (len(str(x).split("/")), str(x)))
 
 
+def get_image_paths(folder: Path) -> list[Path]:
+    return (
+        list(folder.rglob("*.jpg"))
+        + list(folder.rglob("*.jpeg"))
+        + list(folder.rglob("*.png"))
+    )
+
+
 def load_pickle(path: str | Path, filename: str = "classification.pickle"):
     path = Path(path)
 

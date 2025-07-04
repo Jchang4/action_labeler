@@ -5,7 +5,10 @@ from pathlib import Path
 from PIL import Image
 
 
-def get_image_folders(root_dir: Path, exclude_filters: list[str] = []) -> list[Path]:
+def get_image_folders(
+    root_dir: Path | str, exclude_filters: list[str] = []
+) -> list[Path]:
+    root_dir = Path(root_dir)
     image_folders = []
 
     for path in root_dir.rglob("*"):
@@ -18,7 +21,8 @@ def get_image_folders(root_dir: Path, exclude_filters: list[str] = []) -> list[P
     return sorted(image_folders, key=lambda x: (len(str(x).split("/")), str(x)))
 
 
-def get_image_paths(folder: Path) -> list[Path]:
+def get_image_paths(folder: Path | str) -> list[Path]:
+    folder = Path(folder)
     return (
         list(folder.rglob("*.jpg"))
         + list(folder.rglob("*.jpeg"))

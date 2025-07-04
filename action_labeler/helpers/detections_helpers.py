@@ -13,6 +13,12 @@ except ImportError:
     )
 
 
+def image_to_txt_path(image_path: Path | str) -> Path:
+    parent_path = image_path.parent.parent
+    txt_file_name = image_path.with_suffix(".txt").name
+    return parent_path / "detect" / txt_file_name
+
+
 def ultralytics_labels_to_xywh(txt_path: Path | str) -> list[list[float]]:
     """Convert a Ultralytics labels txt file to a list of xywh boxes.
 

@@ -7,7 +7,7 @@ from tqdm.auto import tqdm
 
 from action_labeler.detections.detection import Detection
 from action_labeler.filters.base import IFilter
-from action_labeler.helpers import get_image_paths, load_image
+from action_labeler.helpers import get_image_paths, image_to_txt_path, load_image
 from action_labeler.models.base import IVisionLanguageModel
 from action_labeler.preprocessors.base import IPreprocessor
 from action_labeler.prompt.base import BasePrompt
@@ -59,7 +59,7 @@ class ActionLabeler:
 
         for image_path in tqdm(image_paths):
             image = load_image(image_path)
-            txt_path = self.image_to_txt_path(image_path)
+            txt_path = image_to_txt_path(image_path)
             if not txt_path.exists():
                 print(f"No detections for {str(image_path)}")
                 continue
@@ -126,12 +126,6 @@ class ActionLabeler:
         image_path = Path(image_path)
         prompt = self.prompt.prompt(index, detections, image_path)
         return self.model.predict(prompt, images)
-
-    @staticmethod
-    def image_to_txt_path(image_path: Path | str) -> Path:
-        parent_path = image_path.parent.parent
-        txt_file_name = image_path.with_suffix(".txt").name
-        return parent_path / "detect" / txt_file_name
 
     def save_results(self):
         self.results.to_pickle(self.folder / self.save_filename)

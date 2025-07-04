@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -11,6 +10,8 @@ from action_labeler.helpers import get_image_paths, image_to_txt_path, load_imag
 from action_labeler.models.base import IVisionLanguageModel
 from action_labeler.preprocessors.base import IPreprocessor
 from action_labeler.prompt.base import BasePrompt
+
+from .dataset import LabelerDataset
 
 
 class ActionLabeler:
@@ -26,7 +27,7 @@ class ActionLabeler:
     save_filename: str = "classification.pickle"
 
     # Class variables
-    results: pd.DataFrame
+    dataset: LabelerDataset
 
     def __init__(
         self,
@@ -50,10 +51,14 @@ class ActionLabeler:
         self.save_filename = save_filename
 
         # Load results file if it exists otherwise create an empty dataframe
-        self.results = self.load_results()
+        self.dataset = LabelerDataset(
+            folder,
+            filename=save_filename,
+            classes=prompt.classes,
+        )
 
     def label(self):
-        print(f"Starting with {len(self.results)} labeled images")
+        print(f"Starting with {len(self.dataset)} labeled images")
 
         image_paths = get_image_paths(self.folder)
 
@@ -72,7 +77,7 @@ class ActionLabeler:
             for i in range(len(detections.xyxy)):
                 if not self.apply_filters(image, i, detections):
                     continue
-                elif self.does_result_exist(image_path, i, detections):
+                elif self.dataset.does_row_exist(image_path, detections.xywhn[i]):
                     continue
 
                 preprocessed_image = self.apply_preprocessors(image, i, detections)
@@ -88,7 +93,7 @@ class ActionLabeler:
 
                 if (
                     self.verbose
-                    and len(self.results) % self.save_every == 0
+                    and len(self.dataset) % self.save_every == 0
                     and i == len(detections.xyxy) - 1
                 ):
                     # Show the last detection
@@ -96,12 +101,12 @@ class ActionLabeler:
                     preprocessed_image.show()
                     print(raw_model_output)
 
-            if len(self.results) % self.save_every == 0:
+            if len(self.dataset) % self.save_every == 0:
                 self.save_results()
-                print(f"Saved {len(self.results)} images")
+                print(f"Saved {len(self.dataset)} images")
 
         self.save_results()
-        print(f"Saved {len(self.results)} images")
+        print(f"Saved {len(self.dataset)} images")
 
     def apply_filters(self, image: Image.Image, index: int, detections: Detection):
         for filter in self.filters:
@@ -128,45 +133,11 @@ class ActionLabeler:
         return self.model.predict(prompt, images)
 
     def save_results(self):
-        self.results.to_pickle(self.folder / self.save_filename)
-
-    def load_results(self):
-        try:
-            return pd.read_pickle(self.folder / self.save_filename)
-        except FileNotFoundError:
-            return pd.DataFrame(columns=["image_path", "xywh", "model_output"])
-
-    def does_result_exist(
-        self, image_path: Path | str, index: int, detections: Detection
-    ) -> bool:
-        image_path = Path(image_path)
-        return (
-            not self.results.empty
-            and len(
-                self.results[(self.results["image_path"] == image_path)][
-                    self.results["xywh"].apply(lambda x: " ".join(map(str, x)))
-                    == " ".join(map(str, detections.xywhn[index]))
-                ]
-            )
-            > 0
-        )
+        self.dataset.save()
 
     def add_results(self, image_path: Path | str, xywh: list[float], model_output: str):
         image_path = Path(image_path)
-        self.results = pd.concat(
-            [
-                self.results,
-                pd.DataFrame(
-                    [
-                        {
-                            "image_path": image_path,
-                            "xywh": xywh,
-                            "model_output": model_output,
-                        }
-                    ]
-                ),
-            ]
-        )
+        self.dataset.add_row(image_path, xywh, model_output)
 
     def __repr__(self):
         return f"ActionLabeler(folder={self.folder})"

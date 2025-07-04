@@ -68,11 +68,15 @@ class ActionLabeler:
                 )
                 self.add_results(image_path, detections.xywhn[i], row_results)
 
-                preprocessed_image.show()
-
             if len(self.results) % self.save_every == 0:
                 self.save_results()
                 print(f"Saved {len(self.results)} images")
+
+            if self.verbose:
+                # Show the last detection
+                image.show()
+                preprocessed_image.show()
+                print(row_results)
 
         self.save_results()
         print(f"Saved {len(self.results)} images")

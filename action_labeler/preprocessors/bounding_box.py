@@ -1,4 +1,3 @@
-import numpy as np
 from PIL.Image import Image
 
 from action_labeler.detections.detection import Detection
@@ -37,3 +36,12 @@ class BoundingBoxPreprocessor(IPreprocessor):
             width=self.box_width,
             buffer_px=self.buffer_px,
         )
+
+
+class AllBoundingBoxesPreprocessor(BoundingBoxPreprocessor):
+    """Add bounding boxes to all detections in the image."""
+
+    def preprocess(self, image: Image, index: int, detections: Detection) -> Image:
+        for i in range(len(detections.xyxy)):
+            image = super().preprocess(image, i, detections)
+        return image

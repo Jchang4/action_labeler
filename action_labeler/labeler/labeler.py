@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -19,11 +20,13 @@ class ActionLabeler:
     filters: list[IFilter]
     preprocessors: list[IPreprocessor]
 
-    # Class variables
-    results: pd.DataFrame
+    # Options
     verbose: bool = False
     save_every: int = 50
     save_filename: str = "classification.pickle"
+
+    # Class variables
+    results: pd.DataFrame
 
     def __init__(
         self,
@@ -32,12 +35,19 @@ class ActionLabeler:
         model: IVisionLanguageModel,
         filters: list[IFilter],
         preprocessors: list[IPreprocessor],
+        verbose: bool = False,
+        save_every: int = 50,
+        save_filename: str = "classification.pickle",
     ):
         self.folder = folder
         self.prompt = prompt
         self.model = model
         self.filters = filters
         self.preprocessors = preprocessors
+
+        self.verbose = verbose
+        self.save_every = save_every
+        self.save_filename = save_filename
 
         # Load results file if it exists otherwise create an empty dataframe
         self.results = self.load_results()
@@ -50,6 +60,10 @@ class ActionLabeler:
         for image_path in tqdm(image_paths):
             image = load_image(image_path)
             txt_path = self.image_to_txt_path(image_path)
+            if not txt_path.exists():
+                print(f"No detections for {str(image_path)}")
+                continue
+
             detections = Detection.from_text_path(txt_path, image.size)
             if detections.is_empty():
                 print(f"No detections for {str(image_path)}")
@@ -63,20 +77,28 @@ class ActionLabeler:
 
                 preprocessed_image = self.apply_preprocessors(image, i, detections)
 
-                row_results = self.apply_model(
+                raw_model_output = self.apply_model(
                     image_path, [preprocessed_image], i, detections
                 )
-                self.add_results(image_path, detections.xywhn[i], row_results)
+                self.add_results(
+                    image_path,
+                    detections.xywhn[i],
+                    raw_model_output,
+                )
+
+                if (
+                    self.verbose
+                    and len(self.results) % self.save_every == 0
+                    and i == len(detections.xyxy) - 1
+                ):
+                    # Show the last detection
+                    image.show()
+                    preprocessed_image.show()
+                    print(raw_model_output)
 
             if len(self.results) % self.save_every == 0:
                 self.save_results()
                 print(f"Saved {len(self.results)} images")
-
-            if self.verbose:
-                # Show the last detection
-                image.show()
-                preprocessed_image.show()
-                print(row_results)
 
         self.save_results()
         print(f"Saved {len(self.results)} images")
@@ -118,7 +140,7 @@ class ActionLabeler:
         try:
             return pd.read_pickle(self.folder / self.save_filename)
         except FileNotFoundError:
-            return pd.DataFrame(columns=["image_path", "xywh", "action"])
+            return pd.DataFrame(columns=["image_path", "xywh", "model_output"])
 
     def does_result_exist(
         self, image_path: Path | str, index: int, detections: Detection
@@ -135,7 +157,7 @@ class ActionLabeler:
             > 0
         )
 
-    def add_results(self, image_path: Path | str, xywh: list[float], action: str):
+    def add_results(self, image_path: Path | str, xywh: list[float], model_output: str):
         image_path = Path(image_path)
         self.results = pd.concat(
             [
@@ -145,7 +167,7 @@ class ActionLabeler:
                         {
                             "image_path": image_path,
                             "xywh": xywh,
-                            "action": action,
+                            "model_output": model_output,
                         }
                     ]
                 ),

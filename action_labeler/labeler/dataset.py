@@ -35,7 +35,9 @@ class LabelerDataset:
         else:
             self.df = pd.DataFrame(columns=["image_path", "xywh", "action"])
 
-    def add_row(self, image_path: Path, xywh: list[float], action: str):
+    def add_row(
+        self, image_path: Path, xywh: list[float], action: str
+    ) -> "LabelerDataset":
         self.df = pd.concat(
             [
                 self.df,
@@ -50,8 +52,9 @@ class LabelerDataset:
                 ),
             ]
         )
+        return self
 
-    def does_row_exist(self, image_path: Path | str, xywh: list[float]):
+    def does_row_exist(self, image_path: Path | str, xywh: list[float]) -> bool:
         if str(image_path) not in self.df["image_path"].values:
             return False
 
@@ -66,28 +69,38 @@ class LabelerDataset:
 
         return matching_xywh.any()
 
-    def save(self):
+    def save(self) -> "LabelerDataset":
         self.df.to_pickle(self.folder / self.filename)
+        return self
 
-    def merge_datasets(self, other_datasets: list["LabelerDataset"]):
+    def merge_datasets(
+        self, other_datasets: list["LabelerDataset"]
+    ) -> "LabelerDataset":
         for other_dataset in other_datasets:
             self.df = pd.concat(
                 [self.df, other_dataset.df],
                 ignore_index=True,
                 sort=False,
             )
+        return self
 
-    def plot_class_distribution(self):
+    def plot_class_distribution(self) -> "LabelerDataset":
         class_counts = self.df["action"].value_counts()
         class_counts.plot(kind="bar")
         plt.show()
 
-    def plot_image(self, image_path: Path):
+        return self
+
+    def plot_image(self, image_path: Path) -> "LabelerDataset":
         image = Image.open(image_path)
         plt.imshow(image)
         plt.show()
 
-    def plot_images_for_class(self, class_name: str, num_images: int = 5):
+        return self
+
+    def plot_images_for_class(
+        self, class_name: str, num_images: int = 5
+    ) -> "LabelerDataset":
         class_df = self.df[self.df["action"] == class_name]
         # Create a grid of images (3 columns per row)
         num_rows = int(np.ceil(min(num_images, len(class_df)) / 3))
@@ -136,6 +149,8 @@ class LabelerDataset:
 
         plt.tight_layout()
         plt.show()
+
+        return self
 
     def __repr__(self):
         return f"LabelerDataset(folder={self.folder}, filename={self.filename}, classes={len(self.classes)})"

@@ -13,7 +13,7 @@ from action_labeler.helpers.yolov8_dataset import (
     get_label_path,
     yolov8_labels_to_row,
 )
-from action_labeler.labeler.detection_labelers.dataset import LabelerDataset
+from action_labeler.labeler.detection.dataset import LabelerDataset
 
 
 def create_dataset_folder(

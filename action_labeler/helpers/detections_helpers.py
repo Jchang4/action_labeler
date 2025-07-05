@@ -150,10 +150,10 @@ def segmentation_points_to_xywh(
         tuple[float, float, float, float]: The xywh coordinates.
     """
     points_arr = np.array(segmentation_points).reshape(-1, 2)
-    x_min = points_arr[:, 0].min()
-    y_min = points_arr[:, 1].min()
-    x_max = points_arr[:, 0].max()
-    y_max = points_arr[:, 1].max()
+    x_min = points_arr[:, 0].min().item()
+    y_min = points_arr[:, 1].min().item()
+    x_max = points_arr[:, 0].max().item()
+    y_max = points_arr[:, 1].max().item()
     width = x_max - x_min
     height = y_max - y_min
     x_center = (x_min + x_max) / 2

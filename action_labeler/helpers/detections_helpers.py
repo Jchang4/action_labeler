@@ -19,27 +19,6 @@ def image_to_txt_path(image_path: Path | str) -> Path:
     return parent_path / "detect" / txt_file_name
 
 
-def ultralytics_labels_to_xywh(txt_path: Path | str) -> list[list[float]]:
-    """Convert a Ultralytics labels txt file to a list of xywh boxes.
-
-    Ultralytics labels formats: https://docs.ultralytics.com/modes/predict/#working-with-results
-
-    Note: this method can also handle segmentation and keypoint detection.
-
-    Args:
-        txt_path (Path | str): The path to the txt file.
-
-    Returns:
-        list[list[float]]: A list of xywh boxes.
-    """
-    txt_path = Path(txt_path)
-    return [
-        [float(num) for num in line.split(" ")][1:]  # Skip the class id
-        for line in txt_path.read_text().splitlines()
-        if line and len(line.split(" ")) > 1
-    ]
-
-
 def xyxy_to_xywh(
     xyxy: tuple[float, float, float, float], image_size: tuple[int, int]
 ) -> tuple[float, float, float, float]:

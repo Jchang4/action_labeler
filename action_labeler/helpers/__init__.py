@@ -6,6 +6,7 @@ from .general import (
     load_pickle,
     save_pickle,
 )
+from .parallel import parallel
 from .yolov8_dataset import get_data_yaml
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     "load_pickle",
     "save_pickle",
     "xyxy_to_xywh",
+    "parallel",
 ]

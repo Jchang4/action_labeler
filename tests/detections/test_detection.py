@@ -185,3 +185,29 @@ class TestDetection:
         # Test repr too
         repr_str = repr(detection)
         assert repr_str == str_repr
+
+    def test_get_index(self, detection_text_file):
+        """Test getting a specific detection by index."""
+        image_size = (640, 480)
+        detection = Detection.from_detection_text_path(detection_text_file, image_size)
+
+        # Get the second detection (index 1)
+        single_detection = detection.get_index(1)
+
+        # Check that it's a Detection object with only one item
+        assert isinstance(single_detection, Detection)
+        assert len(single_detection.xyxy) == 1
+        assert len(single_detection.segmentation_points) == 1
+        assert len(single_detection.class_id) == 1
+        assert single_detection.image_size == image_size
+
+        # Check that it contains the correct data
+        assert single_detection.class_id[0] == detection.class_id[1]
+        np.testing.assert_array_equal(single_detection.xyxy[0], detection.xyxy[1])
+        assert (
+            single_detection.segmentation_points[0] == detection.segmentation_points[1]
+        )
+
+        # Test that modifying the extracted detection doesn't affect the original
+        single_detection.class_id[0] = 99
+        assert detection.class_id[1] != 99

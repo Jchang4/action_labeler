@@ -105,6 +105,14 @@ class Detection:
             image_size=image_size,
         )
 
+    def get_index(self, index: int) -> "Detection":
+        return self.__class__(
+            xyxy=np.array([self.xyxy[index]]).reshape(1, 4),
+            segmentation_points=[self.segmentation_points[index]],
+            class_id=np.array([self.class_id[index]]),
+            image_size=self.image_size,
+        )
+
     def copy(self) -> "Detection":
         return self.__class__(
             xyxy=self.xyxy.copy(),

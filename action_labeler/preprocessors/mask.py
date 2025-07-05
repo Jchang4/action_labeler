@@ -8,9 +8,19 @@ from action_labeler.preprocessors.base import IPreprocessor
 class MaskPreprocessor(IPreprocessor):
     """Apply mask for current detection."""
 
-    def __init__(self, opacity: float = 0.5, color: str = "red"):
+    opacity: float
+    color: str
+    fill: bool
+
+    def __init__(
+        self,
+        opacity: float = 0.5,
+        color: str = "red",
+        fill: bool = True,
+    ):
         self.opacity = opacity
         self.color = color
+        self.fill = fill
 
     def preprocess(
         self,
@@ -19,5 +29,10 @@ class MaskPreprocessor(IPreprocessor):
         detections: Detection,
     ) -> Image:
         return add_mask(
-            image, index, detections, opacity=self.opacity, color=self.color
+            image,
+            index,
+            detections,
+            opacity=self.opacity,
+            color=self.color,
+            fill=self.fill,
         )

@@ -173,45 +173,6 @@ def add_masks(
     )
 
 
-def add_background_mask(
-    image: Image.Image,
-    index: int,
-    detections: Detection,
-    color: tuple[int, int, int] = (255, 0, 0),
-    opacity: float = 0.5,
-) -> Image.Image:
-    image = image.copy()
-
-    # Create a transparent overlay for the mask
-    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-
-    # Get the mask for this detection
-    mask = detections.mask[index]
-    # Flip the mask so true = false and false = true
-    mask = ~mask
-
-    # Convert the image to RGBA if it's not already
-    if image.mode != "RGBA":
-        image = image.convert("RGBA")
-
-    # Create a colored mask where mask is True
-    mask_array = np.array(mask)
-    # Transpose mask_array to match the expected dimensions
-    # The mask is created with shape (width, height) but we need (height, width) for image coordinates
-    mask_array = (
-        mask_array.T
-    )  # Transpose to convert from (width, height) to (height, width)
-    y_indices, x_indices = np.where(mask_array)
-
-    # Fill the mask area with the color
-    for y, x in zip(y_indices, x_indices):
-        draw.point((x, y), fill=(*color, int(255 * opacity)))
-
-    # Composite the overlay onto the original image
-    return Image.alpha_composite(image, overlay)
-
-
 def add_text(
     image: Image.Image,
     index: int,

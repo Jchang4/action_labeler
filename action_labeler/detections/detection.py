@@ -10,69 +10,97 @@ except ImportError:
     )
 
 from action_labeler.helpers.detections_helpers import (
+    segmentation_points_to_xywh,
+    xywh_to_segmentation_points,
     xywhs_to_xyxys,
-    xyxys_to_masks,
     xyxys_to_xywhs,
 )
-from action_labeler.helpers.yolov8_dataset import ultralytics_labels_to_xywh
+from action_labeler.helpers.yolov8_dataset import yolov8_labels_to_row
 
 
 class Detection:
     xyxy: np.ndarray
-    mask: np.ndarray
+    segmentation_points: list[list[float]]
     class_id: np.ndarray
     image_size: tuple[int, int]  # as (width, height)
 
     def __init__(
         self,
         xyxy: np.ndarray,
-        mask: np.ndarray,
+        segmentation_points: list[list[float]],
         class_id: np.ndarray,
         image_size: tuple[int, int],
     ):
+        # Check the shapes of the inputs
+        assert (
+            len(xyxy) == len(segmentation_points) == len(class_id)
+        ), f"The number of detections must match the number of masks and class ids. Got {len(xyxy)} {len(segmentation_points)} {len(class_id)}"
+        assert xyxy.shape == (len(xyxy), 4)
+        assert class_id.shape == (len(class_id),)
+        assert image_size[0] > 0 and image_size[1] > 0
+
         self.xyxy = xyxy
-        self.mask = mask
+        self.segmentation_points = segmentation_points
         self.class_id = class_id
         self.image_size = image_size
-
-    @classmethod
-    def from_ultralytics(cls, results: Results) -> "Detection":
-        xyxy = results.boxes.xyxy.cpu().numpy()
-        mask = (
-            results.masks.xy.cpu().numpy()
-            if results.masks
-            else xyxys_to_masks(xyxy, results.orig_shape[::-1])
-        )
-        class_id = results.boxes.cls.cpu().numpy()
-        # Ultralytics returns image size as (height, width)
-        image_size = results.orig_shape[::-1]
-
-        return cls(
-            xyxy=xyxy,
-            mask=mask,
-            class_id=class_id,
-            image_size=image_size,
-        )
 
     @classmethod
     def from_text_path(
         cls, text_path: Path | str, image_size: tuple[int, int]
     ) -> "Detection":
-        xywhs = ultralytics_labels_to_xywh(text_path)
+        # Determine if the text path is a detection or segmentation text path by checking the number of numbers in the first line
+        rows = yolov8_labels_to_row(text_path)
+        if len(rows[0]) == 5:
+            return cls.from_detection_text_path(text_path, image_size)
+        elif len(rows[0]) > 5:
+            return cls.from_segmentation_text_path(text_path, image_size)
+        else:
+            raise ValueError(
+                f"Invalid number of numbers in the first line of {text_path}"
+            )
+
+    @classmethod
+    def from_detection_text_path(
+        cls, text_path: Path | str, image_size: tuple[int, int]
+    ) -> "Detection":
+        rows = yolov8_labels_to_row(text_path)
+        class_ids = [row[0] for row in rows]
+        xywhs = [row[1:] for row in rows]
         xyxys = xywhs_to_xyxys(xywhs, image_size)
-        masks = xyxys_to_masks(xyxys, image_size)
+        segmentation_points = [xywh_to_segmentation_points(xywh) for xywh in xywhs]
         return cls(
-            xyxy=xyxys,
-            mask=masks,
-            class_id=np.zeros(len(xyxys)),
+            xyxy=np.array(xyxys).reshape(-1, 4),
+            segmentation_points=segmentation_points,
+            class_id=np.array(class_ids),
+            image_size=image_size,
+        )
+
+    @classmethod
+    def from_segmentation_text_path(
+        cls, text_path: Path | str, image_size: tuple[int, int]
+    ) -> "Detection":
+        rows = yolov8_labels_to_row(text_path)
+        class_ids = [row[0] for row in rows]
+        segmentation_points = [row[1:] for row in rows]
+
+        xywhs = [
+            segmentation_points_to_xywh(segmentation_point)
+            for segmentation_point in segmentation_points
+        ]
+        xyxys = xywhs_to_xyxys(xywhs, image_size)
+
+        return cls(
+            xyxy=np.array(xyxys).reshape(-1, 4),
+            segmentation_points=segmentation_points,
+            class_id=np.array(class_ids),
             image_size=image_size,
         )
 
     @classmethod
     def empty(cls, image_size: tuple[int, int] = (0, 0)) -> "Detection":
         return cls(
-            xyxy=np.array([]),
-            mask=np.array([]),
+            xyxy=np.array([]).reshape(-1, 4),
+            segmentation_points=[],
             class_id=np.array([]),
             image_size=image_size,
         )
@@ -80,7 +108,7 @@ class Detection:
     def copy(self) -> "Detection":
         return self.__class__(
             xyxy=self.xyxy.copy(),
-            mask=self.mask.copy(),
+            segmentation_points=self.segmentation_points.copy(),
             class_id=self.class_id.copy(),
             image_size=self.image_size,
         )
@@ -89,8 +117,8 @@ class Detection:
         return len(self.xyxy) == 0
 
     @property
-    def xywhn(self) -> np.ndarray:
-        return np.array(xyxys_to_xywhs(self.xyxy, self.image_size))
+    def xywh(self) -> list[tuple[float, float, float, float]]:
+        return xyxys_to_xywhs(self.xyxy, self.image_size)
 
     def __str__(self):
         return (

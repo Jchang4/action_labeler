@@ -6,7 +6,8 @@ from tqdm.auto import tqdm
 
 from action_labeler.detections.detection import Detection
 from action_labeler.filters.base import IFilter
-from action_labeler.helpers import get_image_paths, image_to_txt_path, load_image
+from action_labeler.helpers import get_image_paths, load_image
+from action_labeler.helpers.detections_helpers import image_to_txt_path
 from action_labeler.models.base import IVisionLanguageModel
 from action_labeler.preprocessors.base import IPreprocessor
 from action_labeler.prompt.base import BasePrompt
@@ -77,7 +78,7 @@ class ActionLabeler:
             for i in range(len(detections.xyxy)):
                 if not self.apply_filters(image, i, detections):
                     continue
-                elif self.dataset.does_row_exist(image_path, detections.xywhn[i]):
+                elif self.dataset.does_row_exist(image_path, detections.xywh[i]):
                     continue
 
                 preprocessed_image = self.apply_preprocessors(image, i, detections)
@@ -87,7 +88,7 @@ class ActionLabeler:
                 )
                 self.add_results(
                     image_path,
-                    detections.xywhn[i],
+                    detections.xywh[i],
                     raw_model_output,
                 )
 

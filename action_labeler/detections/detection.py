@@ -10,11 +10,11 @@ except ImportError:
     )
 
 from action_labeler.helpers.detections_helpers import (
-    ultralytics_labels_to_xywh,
     xywhs_to_xyxys,
     xyxys_to_masks,
     xyxys_to_xywhs,
 )
+from action_labeler.helpers.yolov8_dataset import ultralytics_labels_to_xywh
 
 
 class Detection:

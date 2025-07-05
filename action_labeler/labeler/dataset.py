@@ -40,7 +40,7 @@ class LabelerDataset:
             self.df = pd.read_pickle(self.folder / self.filename)
         else:
             self.df = pd.DataFrame(
-                columns=["image_path", "xywh", "segmentation_points" "action"]
+                columns=["image_path", "xywh", "segmentation_points", "action"]
             )
 
     def add_row(

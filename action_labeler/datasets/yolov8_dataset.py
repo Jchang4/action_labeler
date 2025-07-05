@@ -71,6 +71,7 @@ class YoloV8Dataset:
         )
 
     def save(self, output_folder: str | Path, delete_existing: bool = False):
+        self.df["image_name"] = self.df["image_path"].apply(lambda x: Path(x).name)
         create_dataset_folder(output_folder, self.class_name_to_id, delete_existing)
         for image_path, group in tqdm(self.df.groupby("image_path")):
             add_group_to_dataset_yolo_v8(

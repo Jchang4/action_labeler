@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from action_labeler.action_labeler.dataclasses import DetectionType
+from action_labeler.dataclasses import DetectionType
 
 
 def get_data_yaml(dataset_path: Path | str, verbose: bool = False) -> dict:

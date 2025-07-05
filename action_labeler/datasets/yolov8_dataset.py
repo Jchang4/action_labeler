@@ -1,10 +1,8 @@
-import shutil
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import yaml
 from tqdm.auto import tqdm
 
 from action_labeler.dataclasses import DetectionType

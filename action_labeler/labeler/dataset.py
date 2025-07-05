@@ -6,7 +6,7 @@ import pandas as pd
 from PIL import Image
 from tqdm.auto import tqdm
 
-from action_labeler.action_labeler.dataclasses import DetectionType
+from action_labeler.dataclasses import DetectionType
 from action_labeler.detections import Detection
 from action_labeler.helpers.detections_helpers import xywh_to_xyxy
 from action_labeler.helpers.image_helpers import add_bounding_boxes

@@ -27,6 +27,31 @@ cd action_labeler
 pip install -e .
 ```
 
+### Install Testing Dependencies
+
+```bash
+pip install pytest pytest-cov
+```
+
+## Testing
+
+Run tests with pytest:
+
+```bash
+# Run all tests
+pytest
+
+# Run tests with coverage report
+pytest --cov=action_labeler
+
+# Run specific test modules
+pytest tests/helpers/
+pytest tests/detections/
+
+# Run tests verbosely
+pytest -v
+```
+
 ## Requirements
 
 - Python >= 3.9

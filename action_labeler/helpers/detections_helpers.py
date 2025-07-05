@@ -1,22 +1,22 @@
-import shutil
 from pathlib import Path
 
 import numpy as np
-from tqdm.auto import tqdm
-
-try:
-    from ultralytics import YOLO
-    from ultralytics.engine.results import Results
-except ImportError:
-    raise ImportError(
-        "Ultralytics requires the ultralytics package. Please install it with `pip install ultralytics`."
-    )
 
 
-def image_to_txt_path(image_path: Path | str) -> Path:
+def image_to_txt_path(image_path: Path | str, detection_type: str = "detect") -> Path:
+    """Get the path to the txt file for a given image path.
+
+    Args:
+        image_path (Path | str): The path to the image.
+        detection_type (str, optional): The type of detection: "detect" or "segment". Defaults to "detect".
+
+    Returns:
+        Path: The path to the txt file.
+    """
+    image_path = Path(image_path)
     parent_path = image_path.parent.parent
     txt_file_name = image_path.with_suffix(".txt").name
-    return parent_path / "detect" / txt_file_name
+    return parent_path / detection_type / txt_file_name
 
 
 def xyxy_to_xywh(
@@ -105,39 +105,57 @@ def xywhs_to_xyxys(
     return [xywh_to_xyxy(xywh, image_size) for xywh in xywhs]
 
 
-def xyxy_to_mask(
-    xyxy: list[float],
-    image_size: tuple[int, int],
-    buffer_px: int = 0,
-) -> np.ndarray:
-    """Convert xyxy boxes to mask."""
-    width, height = image_size
-    mask = np.zeros((width, height), dtype=bool)
-    x1, y1, x2, y2 = xyxy
-    x1, y1, x2, y2 = (
-        max(0, x1 - buffer_px),
-        max(0, y1 - buffer_px),
-        min(width, x2 + buffer_px),
-        min(height, y2 + buffer_px),
-    )
+def xywh_to_segmentation_points(xywh: tuple[float, float, float, float]) -> list[float]:
+    """Convert xywh (x_center, y_center, width, height) to segmentation points (x1, y1, x2, y2, ..., xn, yn).
 
-    mask[int(x1) : int(x2), int(y1) : int(y2)] = True
-    return mask
-
-
-def xyxys_to_masks(
-    xyxys: list[tuple[float, float, float, float]],
-    image_size: tuple[int, int],
-    buffer_px: int = 0,
-) -> list[list[bool]]:
-    """Convert a list of xyxy coordinates to a list of masks.
+    The segmentation points are the top left, top right, bottom right, and bottom left corners of the bounding box.
 
     Args:
-        xyxys (list[tuple[float, float, float, float]]): The list of xyxy coordinates.
-        image_size (tuple[int, int]): The size of the image as (width, height).
-        buffer_px (int, optional): The buffer in pixels. Defaults to 0.
+        xywh (list[float]): The xywh coordinates as (x_center, y_center, width, height) in normalized coordinates.
 
     Returns:
-        list[list[bool]]: The list of masks.
+        list[float]: The segmentation points.
     """
-    return [xyxy_to_mask(xyxy, image_size, buffer_px) for xyxy in xyxys]
+    x, y, w, h = xywh
+    # top left, top right, bottom right, bottom left
+    top_left_x = x - w / 2
+    top_left_y = y - h / 2
+    top_right_x = x + w / 2
+    top_right_y = y - h / 2
+    bottom_right_x = x + w / 2
+    bottom_right_y = y + h / 2
+    bottom_left_x = x - w / 2
+    bottom_left_y = y + h / 2
+    return [
+        top_left_x,
+        top_left_y,
+        top_right_x,
+        top_right_y,
+        bottom_right_x,
+        bottom_right_y,
+        bottom_left_x,
+        bottom_left_y,
+    ]
+
+
+def segmentation_points_to_xywh(
+    segmentation_points: list[float],
+) -> tuple[float, float, float, float]:
+    """Convert segmentation points (x1, y1, x2, y2, ..., xn, yn) to xywh (x_center, y_center, width, height).
+
+    Args:
+        segmentation_points (list[float]): The segmentation points.
+
+    Returns:
+        tuple[float, float, float, float]: The xywh coordinates.
+    """
+    points_arr = np.array(segmentation_points).reshape(-1, 2)
+    x_min = points_arr[:, 0].min()
+    y_min = points_arr[:, 1].min()
+    x_max = points_arr[:, 0].max()
+    y_max = points_arr[:, 1].max()
+    width = x_max - x_min
+    height = y_max - y_min
+    x_center = (x_min + x_max) / 2
+    y_center = (y_min + y_max) / 2
+    return x_center, y_center, width, height

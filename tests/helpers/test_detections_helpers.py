@@ -1,9 +1,12 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from action_labeler.helpers.detections_helpers import (
     image_to_txt_path,
+    segmentation_points_to_xywh,
+    xywh_to_segmentation_points,
     xywh_to_xyxy,
     xyxy_to_xywh,
 )
@@ -370,3 +373,299 @@ class TestXywhToXyxy:
         result_list = xywh_to_xyxy(xywh_list, image_size)
 
         assert result_tuple == result_list
+
+
+class TestXywhToSegmentationPoints:
+    """Test cases for the xywh_to_segmentation_points function."""
+
+    def test_basic_conversion(self):
+        """Test basic xywh to segmentation points conversion."""
+        # Box with center at (0.5, 0.5), width=0.2, height=0.3
+        xywh = (0.5, 0.5, 0.2, 0.3)
+
+        result = xywh_to_segmentation_points(xywh)
+
+        # Expected points: top-left, top-right, bottom-right, bottom-left
+        expected = [
+            0.4,
+            0.35,  # top-left
+            0.6,
+            0.35,  # top-right
+            0.6,
+            0.65,  # bottom-right
+            0.4,
+            0.65,  # bottom-left
+        ]
+        # Use numpy's isclose for floating point comparisons
+        assert np.allclose(result, expected)
+
+    def test_square_box(self):
+        """Test with a square box."""
+        xywh = (0.5, 0.5, 0.4, 0.4)
+
+        result = xywh_to_segmentation_points(xywh)
+
+        expected = [
+            0.3,
+            0.3,  # top-left
+            0.7,
+            0.3,  # top-right
+            0.7,
+            0.7,  # bottom-right
+            0.3,
+            0.7,  # bottom-left
+        ]
+        # Use numpy's isclose for floating point comparisons
+        assert np.allclose(result, expected)
+
+    def test_corner_box(self):
+        """Test with a box in the corner."""
+        xywh = (0.1, 0.1, 0.2, 0.2)
+
+        result = xywh_to_segmentation_points(xywh)
+
+        expected = [
+            0.0,
+            0.0,  # top-left
+            0.2,
+            0.0,  # top-right
+            0.2,
+            0.2,  # bottom-right
+            0.0,
+            0.2,  # bottom-left
+        ]
+        # Use numpy's isclose for floating point comparisons
+        assert np.allclose(result, expected)
+
+    def test_rectangular_box(self):
+        """Test with a rectangular box."""
+        xywh = (0.5, 0.5, 0.8, 0.4)
+
+        result = xywh_to_segmentation_points(xywh)
+
+        expected = [
+            0.1,
+            0.3,  # top-left
+            0.9,
+            0.3,  # top-right
+            0.9,
+            0.7,  # bottom-right
+            0.1,
+            0.7,  # bottom-left
+        ]
+        # Use numpy's isclose for floating point comparisons
+        assert np.allclose(result, expected)
+
+    def test_return_format(self):
+        """Test that the function returns a list of 8 floats."""
+        xywh = (0.5, 0.5, 0.2, 0.3)
+
+        result = xywh_to_segmentation_points(xywh)
+
+        assert isinstance(result, list)
+        assert len(result) == 8
+        assert all(isinstance(coord, float) for coord in result)
+
+    def test_different_input_types(self):
+        """Test that function works with different input types (list, tuple)."""
+        # Test with tuple
+        xywh_tuple = (0.5, 0.5, 0.2, 0.3)
+        result_tuple = xywh_to_segmentation_points(xywh_tuple)
+
+        # Test with list
+        xywh_list = [0.5, 0.5, 0.2, 0.3]
+        result_list = xywh_to_segmentation_points(xywh_list)
+
+        # Use numpy's isclose for floating point comparisons
+        assert np.allclose(result_tuple, result_list)
+
+    def test_zero_width_box(self):
+        """Test edge case with zero width box."""
+        xywh = (0.5, 0.5, 0.0, 0.2)
+
+        result = xywh_to_segmentation_points(xywh)
+
+        expected = [
+            0.5,
+            0.4,  # top-left
+            0.5,
+            0.4,  # top-right
+            0.5,
+            0.6,  # bottom-right
+            0.5,
+            0.6,  # bottom-left
+        ]
+        # Use numpy's isclose for floating point comparisons
+        assert np.allclose(result, expected)
+
+    def test_zero_height_box(self):
+        """Test edge case with zero height box."""
+        xywh = (0.5, 0.5, 0.2, 0.0)
+
+        result = xywh_to_segmentation_points(xywh)
+
+        expected = [
+            0.4,
+            0.5,  # top-left
+            0.6,
+            0.5,  # top-right
+            0.6,
+            0.5,  # bottom-right
+            0.4,
+            0.5,  # bottom-left
+        ]
+        # Use numpy's isclose for floating point comparisons
+        assert np.allclose(result, expected)
+
+
+class TestSegmentationPointsToXywh:
+    """Test cases for the segmentation_points_to_xywh function."""
+
+    def test_basic_conversion(self):
+        """Test basic segmentation points to xywh conversion."""
+        # Points for a box with center at (0.5, 0.5), width=0.2, height=0.3
+        segmentation_points = [
+            0.4,
+            0.35,  # top-left
+            0.6,
+            0.35,  # top-right
+            0.6,
+            0.65,  # bottom-right
+            0.4,
+            0.65,  # bottom-left
+        ]
+
+        result = segmentation_points_to_xywh(segmentation_points)
+
+        # Expected: center=(0.5, 0.5), width=0.2, height=0.3
+        expected = (0.5, 0.5, 0.2, 0.3)
+        assert np.allclose(result, expected)
+
+    def test_square_box(self):
+        """Test with a square box."""
+        segmentation_points = [
+            0.3,
+            0.3,  # top-left
+            0.7,
+            0.3,  # top-right
+            0.7,
+            0.7,  # bottom-right
+            0.3,
+            0.7,  # bottom-left
+        ]
+
+        result = segmentation_points_to_xywh(segmentation_points)
+
+        expected = (0.5, 0.5, 0.4, 0.4)
+        assert np.allclose(result, expected)
+
+    def test_corner_box(self):
+        """Test with a box in the corner."""
+        segmentation_points = [
+            0.0,
+            0.0,  # top-left
+            0.2,
+            0.0,  # top-right
+            0.2,
+            0.2,  # bottom-right
+            0.0,
+            0.2,  # bottom-left
+        ]
+
+        result = segmentation_points_to_xywh(segmentation_points)
+
+        expected = (0.1, 0.1, 0.2, 0.2)
+        assert np.allclose(result, expected)
+
+    def test_rectangular_box(self):
+        """Test with a rectangular box."""
+        segmentation_points = [
+            0.1,
+            0.3,  # top-left
+            0.9,
+            0.3,  # top-right
+            0.9,
+            0.7,  # bottom-right
+            0.1,
+            0.7,  # bottom-left
+        ]
+
+        result = segmentation_points_to_xywh(segmentation_points)
+
+        expected = (0.5, 0.5, 0.8, 0.4)
+        assert np.allclose(result, expected)
+
+    def test_return_format(self):
+        """Test that the function returns a tuple of 4 floats."""
+        segmentation_points = [
+            0.4,
+            0.35,  # top-left
+            0.6,
+            0.35,  # top-right
+            0.6,
+            0.65,  # bottom-right
+            0.4,
+            0.65,  # bottom-left
+        ]
+
+        result = segmentation_points_to_xywh(segmentation_points)
+
+        assert isinstance(result, tuple)
+        assert len(result) == 4
+        assert all(isinstance(coord, float) for coord in result)
+
+    def test_unordered_points(self):
+        """Test with unordered segmentation points."""
+        # Points in different order: bottom-left, top-left, bottom-right, top-right
+        segmentation_points = [
+            0.4,
+            0.65,  # bottom-left
+            0.4,
+            0.35,  # top-left
+            0.6,
+            0.65,  # bottom-right
+            0.6,
+            0.35,  # top-right
+        ]
+
+        result = segmentation_points_to_xywh(segmentation_points)
+
+        # Expected: center=(0.5, 0.5), width=0.2, height=0.3
+        expected = (0.5, 0.5, 0.2, 0.3)
+        assert np.allclose(result, expected)
+
+    def test_with_more_than_four_points(self):
+        """Test with more than four points forming a polygon."""
+        # Hexagon around center (0.5, 0.5)
+        segmentation_points = [
+            0.4,
+            0.3,  # top-left
+            0.6,
+            0.3,  # top-right
+            0.7,
+            0.5,  # right
+            0.6,
+            0.7,  # bottom-right
+            0.4,
+            0.7,  # bottom-left
+            0.3,
+            0.5,  # left
+        ]
+
+        result = segmentation_points_to_xywh(segmentation_points)
+
+        # Expected: center=(0.5, 0.5), width=0.4, height=0.4
+        expected = (0.5, 0.5, 0.4, 0.4)
+        assert np.allclose(result, expected)
+
+    def test_different_input_types(self):
+        """Test that function works with different input types (list, numpy array)."""
+        # Test with list
+        points_list = [0.4, 0.35, 0.6, 0.35, 0.6, 0.65, 0.4, 0.65]
+        result_list = segmentation_points_to_xywh(points_list)
+
+        # Test with numpy array
+        points_array = np.array([0.4, 0.35, 0.6, 0.35, 0.6, 0.65, 0.4, 0.65])
+        result_array = segmentation_points_to_xywh(points_array)
+
+        assert np.allclose(result_list, result_array)

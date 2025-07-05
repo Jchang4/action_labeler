@@ -1,4 +1,4 @@
+from .base import ActionLabeler, DetectionType
 from .dataset import LabelerDataset
-from .detection_labeler import DetectionLabeler
 
-__all__ = ["DetectionLabeler", "LabelerDataset"]
+__all__ = ["ActionLabeler", "LabelerDataset", "DetectionType"]

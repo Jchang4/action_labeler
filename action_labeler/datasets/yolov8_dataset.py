@@ -7,146 +7,29 @@ import pandas as pd
 import yaml
 from tqdm.auto import tqdm
 
+from action_labeler.dataclasses import DetectionType
 from action_labeler.helpers.general import get_image_paths
 from action_labeler.helpers.yolov8_dataset import (
+    add_group_to_dataset_yolo_v8,
+    create_dataset_folder,
     get_data_yaml,
     get_label_path,
     yolov8_labels_to_row,
 )
-from action_labeler.labeler.dataset import LabelerDataset
-
-
-def create_dataset_folder(
-    folder: str | Path, class_name_to_id: dict, delete_existing: bool = False
-) -> Path:
-    """Create a dataset folder for a given folder.
-
-    Dataset folder structure:
-    - folder_name/
-        - train/
-            - images/
-            - labels/
-        - valid/
-            - images/
-            - labels/
-        - data.yaml
-
-    Args:
-        folder (str | Path): The folder to create the dataset folder for.
-        delete_existing (bool): Whether to delete the existing dataset folder.
-
-    Returns:
-        Path: The path to the dataset folder.
-    """
-
-    folder = Path(folder)
-
-    if delete_existing:
-        shutil.rmtree(folder, ignore_errors=True)
-
-    folder.mkdir(parents=True, exist_ok=True)
-
-    for dataset in ["train", "valid"]:
-        for subfolder in ["images", "labels"]:
-            (folder / dataset / subfolder).mkdir(parents=True, exist_ok=True)
-
-    sorted_class_names = sorted(
-        class_name_to_id.keys(), key=lambda x: class_name_to_id[x]
-    )
-    yaml.dump(
-        {
-            "path": str(folder.name),
-            "train": "train/images",
-            "val": "valid/images",
-            "nc": len(class_name_to_id),
-            "names": sorted_class_names,
-        },
-        (folder / "data.yaml").open("w"),
-    )
-
-    return folder
-
-
-def merge_labeled_datasets(
-    folders: list[str | Path], classes: list[str]
-) -> LabelerDataset:
-    """Merge a list of LabelerDatasets into a single LabelerDataset.
-
-    Args:
-        datasets (list[LabelerDataset]): The list of LabelerDatasets to merge.
-
-    Returns:
-        LabelerDataset: The merged LabelerDataset.
-    """
-    dataset = LabelerDataset(
-        folder=folders[0],
-        filename="classification.pickle",
-        classes=classes,
-    ).merge_datasets([LabelerDataset(folder) for folder in folders[1:]])
-
-    return dataset
-
-
-def copy_image(source_path: str | Path, destination_path: str | Path) -> None:
-    source_path = Path(source_path)
-    destination_path = Path(destination_path)
-
-    shutil.copy(source_path, destination_path)
-
-
-def create_txt_file(
-    detections: pd.DataFrame,
-    destination_path: str | Path,
-    class_name_to_id: dict,
-) -> None:
-    lines = []
-    for _, row in detections.iterrows():
-        if row["class_id"] is None:
-            continue
-        xywh = row["xywh"]
-        class_id = row["class_id"]
-        lines.append(f"{class_id} {xywh[0]} {xywh[1]} {xywh[2]} {xywh[3]}")
-
-    destination_path = Path(destination_path)
-    if destination_path.exists():
-        destination_path.unlink()
-
-    destination_path.write_text("\n".join(lines))
-
-
-def add_group_to_dataset(
-    image_path: Path | str,
-    detections: pd.DataFrame,
-    dataset_folder: str | Path,
-    class_name_to_id: dict,
-) -> pd.DataFrame:
-    dataset_folder = Path(dataset_folder)
-    image_path = Path(image_path)
-    is_train = np.random.random() < 0.8
-
-    if image_path.suffix not in [".jpg", ".jpeg", ".png"]:
-        print(
-            f"Skipping {image_path} for {dataset_folder} because it is not a valid image file"
-        )
-        return
-
-    dataset = "train" if is_train else "valid"
-
-    output_image_path = dataset_folder / dataset / "images" / image_path.name
-    output_label_path = (
-        dataset_folder / dataset / "labels" / image_path.with_suffix(".txt").name
-    )
-
-    copy_image(image_path, output_image_path)
-    create_txt_file(detections, output_label_path, class_name_to_id)
 
 
 class YoloV8Dataset:
     folder: Path
     df: pd.DataFrame
     classes: list[str]
+    detection_type: DetectionType
 
-    def __init__(self, folder: str | Path, classes: list[str], df: pd.DataFrame):
+    def __init__(
+        self,
+        folder: str | Path,
+        classes: list[str],
+        df: pd.DataFrame,
+    ):
         self.folder = Path(folder)
         self.classes = classes
         self.class_name_to_id = {class_name: i for i, class_name in enumerate(classes)}
@@ -192,11 +75,10 @@ class YoloV8Dataset:
     def save(self, output_folder: str | Path, delete_existing: bool = False):
         create_dataset_folder(output_folder, self.class_name_to_id, delete_existing)
         for image_path, group in tqdm(self.df.groupby("image_path")):
-            add_group_to_dataset(
+            add_group_to_dataset_yolo_v8(
                 image_path,
                 group,
                 dataset_folder=output_folder,
-                class_name_to_id=self.class_name_to_id,
             )
 
     def remap_classes(self, old_to_new_class_name: dict[str, str]):
@@ -256,9 +138,13 @@ class YoloV8Dataset:
         data = []
         for class_id, class_name in tqdm(enumerate(self.classes)):
             class_df = self.df[self.df["class_id"] == class_id]
-            class_df = class_df.sample(
-                min_samples, random_state=random_state
-            ).reset_index(drop=True)
+            class_df = (
+                class_df.sample(min_samples, random_state=random_state).reset_index(
+                    drop=True
+                )
+                if len(class_df) > min_samples
+                else class_df
+            )
             data.extend(class_df.to_dict(orient="records"))
 
         # Set dataset column 80% train, 20% valid

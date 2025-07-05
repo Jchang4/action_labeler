@@ -2,13 +2,6 @@ from pathlib import Path
 
 import numpy as np
 
-try:
-    from ultralytics.engine.results import Results
-except ImportError:
-    raise ImportError(
-        "Ultralytics requires the ultralytics package. Please install it with `pip install ultralytics`."
-    )
-
 from action_labeler.helpers.detections_helpers import (
     segmentation_points_to_xywh,
     xywh_to_segmentation_points,

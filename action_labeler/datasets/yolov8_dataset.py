@@ -101,6 +101,8 @@ def create_txt_file(
 ) -> None:
     lines = []
     for _, row in detections.iterrows():
+        if row["class_id"] is None:
+            continue
         xywh = row["xywh"]
         class_id = row["class_id"]
         lines.append(f"{class_id} {xywh[0]} {xywh[1]} {xywh[2]} {xywh[3]}")

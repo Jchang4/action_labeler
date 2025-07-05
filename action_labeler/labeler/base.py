@@ -1,18 +1,17 @@
 from pathlib import Path
 
-import pandas as pd
 from PIL import Image
 from tqdm.auto import tqdm
 
+from action_labeler.dataclasses import DetectionType
 from action_labeler.detections.detection import Detection
 from action_labeler.filters.base import IFilter
 from action_labeler.helpers import get_image_paths, load_image
 from action_labeler.helpers.detections_helpers import image_to_txt_path
+from action_labeler.labeler.dataset import LabelerDataset
 from action_labeler.models.base import IVisionLanguageModel
 from action_labeler.preprocessors.base import IPreprocessor
 from action_labeler.prompt.base import BasePrompt
-
-from .dataset import LabelerDataset
 
 
 class ActionLabeler:
@@ -21,6 +20,7 @@ class ActionLabeler:
     model: IVisionLanguageModel
     filters: list[IFilter]
     preprocessors: list[IPreprocessor]
+    detection_type: DetectionType = DetectionType.DETECT
 
     # Options
     verbose: bool = False
@@ -37,6 +37,7 @@ class ActionLabeler:
         model: IVisionLanguageModel,
         filters: list[IFilter],
         preprocessors: list[IPreprocessor],
+        detection_type: DetectionType = DetectionType.DETECT,
         verbose: bool = False,
         save_every: int = 50,
         save_filename: str = "classification.pickle",
@@ -46,6 +47,7 @@ class ActionLabeler:
         self.model = model
         self.filters = filters
         self.preprocessors = preprocessors
+        self.detection_type = detection_type
 
         self.verbose = verbose
         self.save_every = save_every
@@ -54,8 +56,8 @@ class ActionLabeler:
         # Load results file if it exists otherwise create an empty dataframe
         self.dataset = LabelerDataset(
             folder,
-            filename=save_filename,
             classes=prompt.classes,
+            filename=save_filename,
         )
 
     def label(self):
@@ -65,8 +67,8 @@ class ActionLabeler:
 
         for image_path in tqdm(image_paths):
             image = load_image(image_path)
-            txt_path = image_to_txt_path(image_path)
-            if not txt_path.exists():
+            txt_path = self.get_txt_path(image_path)
+            if txt_path is None:
                 print(f"No detections for {str(image_path)}")
                 continue
 
@@ -89,6 +91,7 @@ class ActionLabeler:
                 self.add_results(
                     image_path,
                     detections.xywh[i],
+                    detections.segmentation_points[i],
                     raw_model_output,
                 )
 
@@ -108,6 +111,21 @@ class ActionLabeler:
 
         self.save_results()
         print(f"Saved {len(self.dataset)} images")
+
+    def get_txt_path(self, image_path: Path | str) -> Path | None:
+        """
+        Get the labels .txt path for the image.
+        Returns None if the labels .txt path does not exist.
+
+        This method can be overridden to return different txt paths for different
+        label types, such as detection or segmentation.
+        """
+        txt_path = image_to_txt_path(
+            image_path, detection_type=self.detection_type.value
+        )
+        if not txt_path.exists():
+            return None
+        return txt_path
 
     def apply_filters(self, image: Image.Image, index: int, detections: Detection):
         for filter in self.filters:
@@ -136,9 +154,20 @@ class ActionLabeler:
     def save_results(self):
         self.dataset.save()
 
-    def add_results(self, image_path: Path | str, xywh: list[float], model_output: str):
+    def add_results(
+        self,
+        image_path: Path | str,
+        xywh: list[float],
+        segmentation_points: list[list[float]],
+        model_output: str,
+    ):
         image_path = Path(image_path)
-        self.dataset.add_row(image_path, xywh, model_output)
+        self.dataset.add_row(
+            image_path=image_path,
+            xywh=xywh,
+            segmentation_points=segmentation_points,
+            action=model_output,
+        )
 
     def __repr__(self):
         return f"ActionLabeler(folder={self.folder})"

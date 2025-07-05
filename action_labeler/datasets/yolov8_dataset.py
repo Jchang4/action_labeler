@@ -281,9 +281,65 @@ class YoloV8Dataset:
         )
         return balanced_ds
 
+    def add_background_images(
+        self, background_images_folder: str | Path, pct_background: float = 0.2
+    ):
+        background_images_folder = Path(background_images_folder)
+        background_images = get_image_paths(background_images_folder)
+        np.random.shuffle(background_images)
+        num_samples = int(self.df["class_id"].value_counts().min() * pct_background)
+        for image_path in background_images[:num_samples]:
+            dataset = np.random.choice(["train", "valid"], p=[0.8, 0.2])
+            self.df = pd.concat(
+                [
+                    self.df,
+                    pd.DataFrame(
+                        {
+                            "dataset": [dataset],
+                            "image_path": [image_path],
+                            "xywh": [None],
+                            "class_id": [None],
+                        }
+                    ),
+                ],
+                ignore_index=True,
+            )
+        return self
+
     def plot_class_distribution(self):
-        class_names = self.df["class_id"].apply(lambda x: self.classes[x])
-        class_names.value_counts().plot(kind="bar")
+        # Create a single figure
+        fig, ax = plt.subplots(figsize=(12, 6))
+
+        # Get class names for all samples
+        class_names = self.df["class_id"].apply(
+            lambda x: self.classes[x] if x is not None else "background"
+        )
+
+        # Get counts for train and validation sets
+        train_counts = class_names[self.df["dataset"] == "train"].value_counts()
+        valid_counts = class_names[self.df["dataset"] == "valid"].value_counts()
+
+        # Combine all class names to ensure we have all categories
+        all_classes = pd.concat([train_counts, valid_counts]).index.unique()
+
+        # Create a DataFrame with all classes and fill missing values with 0
+        df_plot = pd.DataFrame(
+            {
+                "Train": [train_counts.get(cls, 0) for cls in all_classes],
+                "Valid": [valid_counts.get(cls, 0) for cls in all_classes],
+            },
+            index=all_classes,
+        )
+
+        # Plot both distributions in one graph with different colors
+        df_plot.plot(kind="bar", ax=ax, color=["blue", "orange"])
+
+        ax.set_title("Class Distribution in Training and Validation Sets")
+        ax.set_ylabel("Count")
+        ax.set_xlabel("Class")
+        ax.legend(["Training Set", "Validation Set"])
+
+        plt.tight_layout()
         plt.show()
 
     def plot_dataset(self):

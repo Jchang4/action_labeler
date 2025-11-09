@@ -136,3 +136,5 @@ cython_debug/
 
 old/
 yolo*.pt
+.claude/
+.cursor/

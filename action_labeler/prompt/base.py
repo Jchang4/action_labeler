@@ -8,6 +8,10 @@ class BasePrompt(ABC):
     """
     Base class for prompts that are used to label actions in images.
 
+    To use the classes, the template is expected to have: `{classes}` in the template.
+    This will be used with `String.format()` to replace the `{classes}` with the formatted classes.
+
+
     Args:
         template: The template for the prompt.
         classes: The classes for the prompt.

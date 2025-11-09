@@ -8,23 +8,21 @@ from .base import BasePrompt
 class TextPrompt(BasePrompt):
     """
     A prompt that returns a text string.
+    This is usefulf or static prompts that do not have classes.
 
-    No classes are used. This is similar to asking an LLM a question.
+    NOTE: No classes are used in this prompt. This is similar to asking an LLM a question.
 
     Args:
         prompt (str): The text prompt to return.
     """
 
-    text_prompt: str
-
-    def __init__(self, prompt: str):
-        super().__init__(prompt, classes=[], numbered_classes=False)
-        self.text_prompt = prompt
-
     def prompt(
         self,
-        index: int,
-        detections: Detection,
-        image_path: Path,
+        _index: int,
+        _detections: Detection,
+        _image_path: Path,
     ) -> str:
-        return self.text_prompt
+        """
+        Return the template.
+        """
+        return self.template

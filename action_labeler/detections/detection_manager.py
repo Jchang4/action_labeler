@@ -173,7 +173,7 @@ class DetectionManager:
 
         for detection_file in source_dir.iterdir():
             if not detection_file.suffix == ".txt":
-            continue
+                continue
 
             target_path = target_dir / detection_file.name
 

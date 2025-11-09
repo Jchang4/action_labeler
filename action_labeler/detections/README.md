@@ -17,35 +17,36 @@ All helper functions are colocated in `helpers.py` to keep the module self-conta
 ### Loading Detections from File
 
 ```python
-from action_labeler.detections import Detection, DetectionFormat
+from action_labeler.detections import Detection
 from PIL import Image
 
-# Load image to get size
+# Load image
 image = Image.open("image.jpg")
-image_size = image.size  # (width, height)
 
 # Automatically detect format from .txt file
-detection = Detection.from_text_path("labels/image.txt", image_size)
+detection = Detection.from_text_path("labels/image.txt", image)
 
 # Or specify the format explicitly
-bbox_detection = Detection.from_bbox_text_path("labels/image.txt", image_size)
-segment_detection = Detection.from_segment_text_path("labels/image.txt", image_size)
+bbox_detection = Detection.from_bbox_text_path("labels/image.txt", image)
+segment_detection = Detection.from_segment_text_path("labels/image.txt", image)
 
 # For pose, you must specify the number of keypoints
-pose_detection = Detection.from_pose_text_path("labels/image.txt", image_size, num_keypoints=17)
+pose_detection = Detection.from_pose_text_path("labels/image.txt", image, num_keypoints=17)
 ```
+
+**Note:** The API accepts `image: Image.Image` directly rather than `image_size: tuple`. This design eliminates potential width/height confusion since PIL uses `(width, height)` order while numpy and many other libraries use `(height, width)`. By passing the image object, the Detection class extracts the dimensions internally in the correct format, making the API less error-prone.
 
 ### Creating Empty Detection
 
 ```python
-# Empty detection (no objects found)
-empty = Detection.empty(image_size=(1920, 1080))
+from PIL import Image
 
-# Empty detection with specific format
-empty_pose = Detection.empty(
-    image_size=(1920, 1080), 
-    detection_format=DetectionFormat.POSE
-)
+# Empty detection (no objects found)
+image = Image.new("RGB", (1920, 1080))
+empty = Detection.empty(image)
+
+# Empty detection without an image (creates 0x0 placeholder)
+empty_no_image = Detection.empty()
 ```
 
 ### Accessing Detection Data
@@ -64,13 +65,9 @@ class_ids = detection.class_id  # numpy array, shape (N,)
 polygons = detection.segmentation_points  # list of lists
 
 # Keypoints (for pose format only)
-if detection.format == DetectionFormat.POSE:
-    keypoints = detection.keypoints  # numpy array, shape (N, K, 3)
-    # Each keypoint: [x, y, visibility]
-    # visibility: 0=not labeled, 1=labeled but not visible, 2=labeled and visible
-
-# Check format
-print(detection.format)  # DetectionFormat.BBOX, SEGMENT, or POSE
+if detection.keypoints.size > 0:
+    keypoints = detection.keypoints  # numpy array, shape (N, K, 2)
+    # Each keypoint: [x, y] in normalized coordinates [0-1]
 
 # Check if empty
 if detection.is_empty():
@@ -109,12 +106,11 @@ class_id x1 y1 x2 y2 x3 y3 ... xn yn
 
 ### Pose Format
 ```
-class_id x_center y_center width height px1 py1 v1 px2 py2 v2 ... pxn pyn vn
+class_id x_center y_center width height px1 py1 px2 py2 ... pxn pyn
 ```
-- 5 bbox values + 3 values per keypoint (x, y, visibility)
+- 5 bbox values + 2 values per keypoint (x, y)
 - All coordinates normalized (0-1)
-- Visibility values: 0, 1, or 2
-- Example for 3 keypoints: `0 0.5 0.5 0.3 0.4 0.6 0.3 2 0.5 0.4 2 0.4 0.3 1`
+- Example for 3 keypoints: `0 0.5 0.5 0.3 0.4 0.6 0.3 0.5 0.4 0.4 0.3`
 
 ## DetectionManager
 
@@ -155,11 +151,11 @@ detector.detect("datasets/classB/")
 
 ```
 detections/
-├── __init__.py           # Exports: Detection, DetectionFormat, DetectionManager
+├── __init__.py           # Exports: Detection, DetectionManager
 ├── detection.py          # Detection class (main container)
 ├── detection_manager.py  # YOLO detection runner
 ├── helpers.py            # Coordinate conversion helpers
-└── README.md            # This file
+└── README.md             # This file
 ```
 
 ### Key Design Decisions
@@ -197,7 +193,7 @@ for image_path in images_dir.glob("*.jpg"):
     
     # Load corresponding detections
     txt_path = detect_dir / image_path.with_suffix(".txt").name
-    detection = Detection.from_text_path(txt_path, image.size)
+    detection = Detection.from_text_path(txt_path, image)
     
     # Process each detection
     for i in range(len(detection.xyxy)):
@@ -209,25 +205,24 @@ for image_path in images_dir.glob("*.jpg"):
 ### Example 2: Work with Pose Keypoints
 
 ```python
-from action_labeler.detections import Detection, DetectionFormat
+from action_labeler.detections import Detection
 from PIL import Image
 
 # Load pose detections (17 keypoints for COCO format)
 image = Image.open("person.jpg")
 detection = Detection.from_pose_text_path(
-    "labels/person.txt", 
-    image.size,
+    "labels/person.txt",
+    image,
     num_keypoints=17
 )
 
 # Access keypoints
 for i in range(len(detection.keypoints)):
-    keypoints = detection.keypoints[i]  # Shape: (17, 3)
-    
+    keypoints = detection.keypoints[i]  # Shape: (17, 2)
+
     # Check each keypoint
-    for kp_idx, (x, y, visibility) in enumerate(keypoints):
-        if visibility == 2:  # Labeled and visible
-            print(f"Keypoint {kp_idx}: ({x:.3f}, {y:.3f})")
+    for kp_idx, (x, y) in enumerate(keypoints):
+        print(f"Keypoint {kp_idx}: ({x:.3f}, {y:.3f})")
 ```
 
 ### Example 3: Filter Detections
@@ -238,7 +233,7 @@ from PIL import Image
 import numpy as np
 
 image = Image.open("crowded_scene.jpg")
-detection = Detection.from_text_path("labels/crowded_scene.txt", image.size)
+detection = Detection.from_text_path("labels/crowded_scene.txt", image)
 
 # Filter by class (e.g., only persons, class_id=0)
 person_mask = detection.class_id == 0
@@ -247,8 +242,7 @@ filtered_detection = Detection(
     segmentation_points=[detection.segmentation_points[i] for i, m in enumerate(person_mask) if m],
     keypoints=detection.keypoints[person_mask] if detection.keypoints.size > 0 else np.array([]),
     class_id=detection.class_id[person_mask],
-    image_size=detection.image_size,
-    detection_format=detection.format
+    image=image,
 )
 
 print(f"Filtered from {len(detection.xyxy)} to {len(filtered_detection.xyxy)} persons")
@@ -271,8 +265,10 @@ xyxys = xywhs_to_xyxys(xywhs, image_size)
 ### After
 ```python
 from action_labeler.detections import Detection
+from PIL import Image
 
-detection = Detection.from_text_path("labels.txt", image_size)
+image = Image.open("image.jpg")
+detection = Detection.from_text_path("labels.txt", image)
 xyxys = detection.xyxy  # Already in pixel coordinates
 xywhs = detection.xywh  # Normalized coordinates
 ```
@@ -282,22 +278,24 @@ The `Detection` class handles all coordinate conversions internally, making your
 ## Testing
 
 ```python
+from PIL import Image
+
+# Create test image (or load from file)
+test_image = Image.new("RGB", (1920, 1080))
+
 # Test with bbox format
-bbox_detection = Detection.from_bbox_text_path("test_bbox.txt", (1920, 1080))
-assert bbox_detection.format == DetectionFormat.BBOX
+bbox_detection = Detection.from_bbox_text_path("test_bbox.txt", test_image)
 assert len(bbox_detection.xyxy) > 0
 assert bbox_detection.keypoints.size == 0
 
 # Test with segmentation format
-seg_detection = Detection.from_segment_text_path("test_seg.txt", (1920, 1080))
-assert seg_detection.format == DetectionFormat.SEGMENT
+seg_detection = Detection.from_segment_text_path("test_seg.txt", test_image)
 assert all(len(seg) > 0 for seg in seg_detection.segmentation_points)
 
 # Test with pose format
-pose_detection = Detection.from_pose_text_path("test_pose.txt", (1920, 1080), num_keypoints=17)
-assert pose_detection.format == DetectionFormat.POSE
+pose_detection = Detection.from_pose_text_path("test_pose.txt", test_image, num_keypoints=17)
 assert pose_detection.keypoints.shape[1] == 17
-assert pose_detection.keypoints.shape[2] == 3
+assert pose_detection.keypoints.shape[2] == 2
 ```
 
 ## References

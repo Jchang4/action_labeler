@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from PIL import Image
 
 from action_labeler.detections.detection import Detection
 from action_labeler.helpers.detections_helpers import xywh_to_segmentation_points
@@ -55,7 +56,8 @@ class TestDetection:
 
     def test_empty_detection(self):
         """Test creating an empty detection."""
-        detection = Detection.empty(image_size=(640, 480))
+        image = Image.new('RGB', (640, 480))
+        detection = Detection.empty(image=image)
 
         assert detection.is_empty()
         assert detection.image_size == (640, 480)
@@ -65,11 +67,11 @@ class TestDetection:
 
     def test_from_detection_text_path(self, detection_text_file):
         """Test creating a Detection from a detection text file."""
-        image_size = (640, 480)
-        detection = Detection.from_detection_text_path(detection_text_file, image_size)
+        image = Image.new('RGB', (640, 480))
+        detection = Detection.from_bbox_text_path(detection_text_file, image)
 
         assert not detection.is_empty()
-        assert detection.image_size == image_size
+        assert detection.image_size == (640, 480)
         assert len(detection.xyxy) == 3
         assert len(detection.segmentation_points) == 3
         assert len(detection.class_id) == 3
@@ -100,13 +102,13 @@ class TestDetection:
 
     def test_from_segmentation_text_path(self, segmentation_text_file):
         """Test creating a Detection from a segmentation text file."""
-        image_size = (640, 480)
-        detection = Detection.from_segmentation_text_path(
-            segmentation_text_file, image_size
+        image = Image.new('RGB', (640, 480))
+        detection = Detection.from_segment_text_path(
+            segmentation_text_file, image
         )
 
         assert not detection.is_empty()
-        assert detection.image_size == image_size
+        assert detection.image_size == (640, 480)
         assert len(detection.xyxy) == 3
         assert len(detection.segmentation_points) == 3
         assert len(detection.class_id) == 3
@@ -120,24 +122,24 @@ class TestDetection:
 
     def test_from_text_path_detection(self, detection_text_file):
         """Test creating a Detection using from_text_path with a detection file."""
-        image_size = (640, 480)
-        detection = Detection.from_text_path(detection_text_file, image_size)
+        image = Image.new('RGB', (640, 480))
+        detection = Detection.from_text_path(detection_text_file, image)
 
         assert not detection.is_empty()
         assert len(detection.class_id) == 3
 
     def test_from_text_path_segmentation(self, segmentation_text_file):
         """Test creating a Detection using from_text_path with a segmentation file."""
-        image_size = (640, 480)
-        detection = Detection.from_text_path(segmentation_text_file, image_size)
+        image = Image.new('RGB', (640, 480))
+        detection = Detection.from_text_path(segmentation_text_file, image)
 
         assert not detection.is_empty()
         assert len(detection.class_id) == 3
 
     def test_copy(self, detection_text_file):
         """Test copying a Detection object."""
-        image_size = (640, 480)
-        detection = Detection.from_detection_text_path(detection_text_file, image_size)
+        image = Image.new('RGB', (640, 480))
+        detection = Detection.from_bbox_text_path(detection_text_file, image)
         copied = detection.copy()
 
         # Check that it's a different object but with the same values
@@ -155,8 +157,8 @@ class TestDetection:
 
     def test_xywh_property(self, detection_text_file):
         """Test the xywh property."""
-        image_size = (640, 480)
-        detection = Detection.from_detection_text_path(detection_text_file, image_size)
+        image = Image.new('RGB', (640, 480))
+        detection = Detection.from_bbox_text_path(detection_text_file, image)
 
         xywh = detection.xywh
         assert len(xywh) == 3
@@ -174,8 +176,8 @@ class TestDetection:
 
     def test_string_representation(self, detection_text_file):
         """Test string representation of Detection objects."""
-        image_size = (640, 480)
-        detection = Detection.from_detection_text_path(detection_text_file, image_size)
+        image = Image.new('RGB', (640, 480))
+        detection = Detection.from_bbox_text_path(detection_text_file, image)
 
         str_repr = str(detection)
         assert "Detection" in str_repr
@@ -188,8 +190,8 @@ class TestDetection:
 
     def test_get_index(self, detection_text_file):
         """Test getting a specific detection by index."""
-        image_size = (640, 480)
-        detection = Detection.from_detection_text_path(detection_text_file, image_size)
+        image = Image.new('RGB', (640, 480))
+        detection = Detection.from_bbox_text_path(detection_text_file, image)
 
         # Get the second detection (index 1)
         single_detection = detection.get_index(1)
@@ -199,7 +201,7 @@ class TestDetection:
         assert len(single_detection.xyxy) == 1
         assert len(single_detection.segmentation_points) == 1
         assert len(single_detection.class_id) == 1
-        assert single_detection.image_size == image_size
+        assert single_detection.image_size == (640, 480)
 
         # Check that it contains the correct data
         assert single_detection.class_id[0] == detection.class_id[1]

@@ -1,8 +1,11 @@
 from pathlib import Path
 
 import numpy as np
+from PIL import Image
 
 from .helpers import (
+    DetectionFormat,
+    detect_format,
     keypoints_to_numpy,
     segmentation_points_to_xywh,
     xywh_to_segmentation_points,
@@ -24,7 +27,7 @@ class Detection:
         segmentation_points: List of polygons, each as list of normalized coords
         keypoints: Keypoints array, shape (N, K, 2) as [x, y]
         class_id: Class IDs, shape (N,)
-        image_size: Image dimensions as (width, height) in pixels
+        image: PIL Image object
 
     Reference:
         https://docs.ultralytics.com/datasets/detect/#ultralytics-yolo-format
@@ -34,7 +37,7 @@ class Detection:
     segmentation_points: list[list[float]]
     keypoints: np.ndarray
     class_id: np.ndarray
-    image_size: tuple[int, int]  # as (width, height)
+    image: Image.Image
 
     def __init__(
         self,
@@ -42,7 +45,7 @@ class Detection:
         segmentation_points: list[list[float]],
         keypoints: np.ndarray,
         class_id: np.ndarray,
-        image_size: tuple[int, int],
+        image: Image.Image,
     ):
         """Initialize Detection container.
 
@@ -51,7 +54,7 @@ class Detection:
             segmentation_points: List of N polygons (can be empty lists for bbox-only)
             keypoints: Keypoints array, shape (N, K, 2) or empty array
             class_id: Class IDs, shape (N,)
-            image_size: (width, height) in pixels
+            image: PIL.Image.Image object
         """
         # Validate inputs
         num_detections = len(xyxy)
@@ -74,19 +77,19 @@ class Detection:
         assert class_id.shape == (
             num_detections,
         ), f"Expected shape ({num_detections},), got {class_id.shape}"
-        assert image_size[0] > 0 and image_size[1] > 0, "Image size must be positive"
+        assert image.size[0] > 0 and image.size[1] > 0, "Image size must be positive"
 
         self.xyxy = xyxy
         self.segmentation_points = segmentation_points
         self.keypoints = keypoints
         self.class_id = class_id
-        self.image_size = image_size
+        self.image = image
 
     @classmethod
     def from_text_path(
         cls,
         text_path: Path | str,
-        image_size: tuple[int, int],
+        image: Image.Image,
         num_keypoints: int | None = None,
     ) -> "Detection":
         """Load detections from YOLO format text file.
@@ -96,7 +99,7 @@ class Detection:
 
         Args:
             text_path: Path to YOLO format .txt file
-            image_size: (width, height) in pixels
+            image: PIL.Image.Image object
             num_keypoints: Number of keypoints per detection (required for pose format)
 
         Returns:
@@ -110,40 +113,28 @@ class Detection:
         """
         rows = yolov8_labels_to_rows(text_path)
         if not rows:
-            return cls.empty(image_size)
+            return cls.empty(image)
 
-        # Detect format based on number of values in first row
-        num_values = len(rows[0])
+        # Detect format based on the rows
+        format_type = detect_format(rows, num_keypoints)
 
-        if num_values == 5:
-            # Bbox format: class x_center y_center width height
-            return cls.from_bbox_text_path(text_path, image_size)
-        elif num_values > 5:
-            # Could be segmentation or pose
-            # Pose format has: 5 (bbox) + 2*num_keypoints (keypoints in 2D)
-            # So (num_values - 5) must be divisible by 2 for pose
-            remaining = num_values - 5
-            if remaining > 0 and remaining % 2 == 0 and num_keypoints is not None:
-                # Pose format
-                expected_values = 5 + 2 * num_keypoints
-                if num_values == expected_values:
-                    return cls.from_pose_text_path(text_path, image_size, num_keypoints)
-                else:
-                    raise ValueError(
-                        f"Expected {expected_values} values for pose with {num_keypoints} keypoints, "
-                        f"but got {num_values} in {text_path}"
-                    )
-            else:
-                # Segmentation format (variable number of polygon points)
-                return cls.from_segment_text_path(text_path, image_size)
+        # Route to appropriate loader based on detected format
+        if format_type == DetectionFormat.BBOX:
+            return cls.from_bbox_text_path(text_path, image)
+        elif format_type == DetectionFormat.SEGMENT:
+            return cls.from_segment_text_path(text_path, image)
+        elif format_type == DetectionFormat.POSE:
+            if num_keypoints is None:
+                raise ValueError(
+                    f"num_keypoints is required for pose format detection in {text_path}"
+                )
+            return cls.from_pose_text_path(text_path, image, num_keypoints)
         else:
-            raise ValueError(
-                f"Invalid YOLO format: expected at least 5 values, got {num_values} in {text_path}"
-            )
+            raise ValueError(f"Unknown detection format: {format_type}")
 
     @classmethod
     def from_bbox_text_path(
-        cls, text_path: Path | str, image_size: tuple[int, int]
+        cls, text_path: Path | str, image: Image.Image
     ) -> "Detection":
         """Load bounding box detections from YOLO format text file.
 
@@ -151,7 +142,7 @@ class Detection:
 
         Args:
             text_path: Path to .txt file
-            image_size: (width, height) in pixels
+            image: PIL.Image.Image object
 
         Returns:
             Detection with bbox format
@@ -162,7 +153,7 @@ class Detection:
         rows = yolov8_labels_to_rows(text_path)
         class_ids = [int(row[0]) for row in rows]
         xywhs = [tuple(row[1:5]) for row in rows]
-        xyxys = xywhs_to_xyxys(xywhs, image_size)
+        xyxys = xywhs_to_xyxys(xywhs, image.size)
 
         # Generate segmentation points from bbox (4 corners)
         segmentation_points = [xywh_to_segmentation_points(xywh) for xywh in xywhs]
@@ -172,12 +163,12 @@ class Detection:
             segmentation_points=segmentation_points,
             keypoints=np.array([]),  # No keypoints for bbox
             class_id=np.array(class_ids),
-            image_size=image_size,
+            image=image,
         )
 
     @classmethod
     def from_segment_text_path(
-        cls, text_path: Path | str, image_size: tuple[int, int]
+        cls, text_path: Path | str, image: Image.Image
     ) -> "Detection":
         """Load segmentation detections from YOLO format text file.
 
@@ -185,7 +176,7 @@ class Detection:
 
         Args:
             text_path: Path to .txt file
-            image_size: (width, height) in pixels
+            image: PIL.Image.Image object
 
         Returns:
             Detection with segment format
@@ -202,21 +193,21 @@ class Detection:
             segmentation_points_to_xywh(seg_points)
             for seg_points in segmentation_points
         ]
-        xyxys = xywhs_to_xyxys(xywhs, image_size)
+        xyxys = xywhs_to_xyxys(xywhs, image.size)
 
         return cls(
             xyxy=np.array(xyxys).reshape(-1, 4),
             segmentation_points=segmentation_points,
             keypoints=np.array([]),  # No keypoints for segmentation
             class_id=np.array(class_ids),
-            image_size=image_size,
+            image=image,
         )
 
     @classmethod
     def from_pose_text_path(
         cls,
         text_path: Path | str,
-        image_size: tuple[int, int],
+        image: Image.Image,
         num_keypoints: int,
     ) -> "Detection":
         """Load pose estimation detections from YOLO format text file (2D format).
@@ -229,7 +220,7 @@ class Detection:
 
         Args:
             text_path: Path to .txt file
-            image_size: (width, height) in pixels
+            image: PIL.Image.Image object
             num_keypoints: Number of keypoints per detection
 
         Returns:
@@ -241,7 +232,7 @@ class Detection:
         rows = yolov8_labels_to_rows(text_path)
         class_ids = [int(row[0]) for row in rows]
         xywhs = [tuple(row[1:5]) for row in rows]
-        xyxys = xywhs_to_xyxys(xywhs, image_size)
+        xyxys = xywhs_to_xyxys(xywhs, image.size)
 
         # Generate segmentation points from bbox (4 corners)
         segmentation_points = [xywh_to_segmentation_points(xywh) for xywh in xywhs]
@@ -260,28 +251,32 @@ class Detection:
             segmentation_points=segmentation_points,
             keypoints=keypoints,
             class_id=np.array(class_ids),
-            image_size=image_size,
+            image=image,
         )
 
     @classmethod
     def empty(
         cls,
-        image_size: tuple[int, int] = (0, 0),
+        image: Image.Image | None = None,
     ) -> "Detection":
         """Create an empty Detection with no detections.
 
         Args:
-            image_size: (width, height) in pixels
+            image: PIL.Image.Image object (optional, defaults to creating a 0x0 placeholder)
 
         Returns:
             Empty Detection object
         """
+        if image is None:
+            # Create a minimal placeholder image for empty detection
+            image = Image.new('RGB', (0, 0))
+
         return cls(
             xyxy=np.array([]).reshape(-1, 4),
             segmentation_points=[],
             keypoints=np.array([]),
             class_id=np.array([]),
-            image_size=image_size,
+            image=image,
         )
 
     def get_index(self, index: int) -> "Detection":
@@ -304,7 +299,7 @@ class Detection:
             segmentation_points=[self.segmentation_points[index]],
             keypoints=keypoints,
             class_id=np.array([self.class_id[index]]),
-            image_size=self.image_size,
+            image=self.image,
         )
 
     def copy(self) -> "Detection":
@@ -320,7 +315,7 @@ class Detection:
                 self.keypoints.copy() if self.keypoints.size > 0 else np.array([])
             ),
             class_id=self.class_id.copy(),
-            image_size=self.image_size,
+            image=self.image.copy(),
         )
 
     def is_empty(self) -> bool:
@@ -338,13 +333,24 @@ class Detection:
         Returns:
             List of (x_center, y_center, width, height) in normalized coords [0-1]
         """
-        return xyxys_to_xywhs(self.xyxy, self.image_size)
+        return xyxys_to_xywhs(self.xyxy, self.image.size)
+
+    @property
+    def image_size(self) -> tuple[int, int]:
+        """Get image size as (width, height).
+
+        This property provides backward compatibility for code that accesses image_size directly.
+
+        Returns:
+            Tuple of (width, height) in pixels
+        """
+        return self.image.size
 
     def __str__(self):
         return (
             f"<Detection "
             f"num_detections={len(self.xyxy)} "
-            f"image_size={self.image_size}>"
+            f"image_size={self.image.size}>"
         )
 
     def __repr__(self):

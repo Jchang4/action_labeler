@@ -142,10 +142,17 @@ def create_txt_file(
         if row["class_id"] is None:
             continue
 
+        xywh = []
         if detection_type == DetectionType.DETECT:
             xywh = row["xywh"]
         elif detection_type == DetectionType.SEGMENT:
             xywh = row["segmentation_points"]
+
+        if not xywh:
+            print(
+                f"Skipping {row['image_path']} for {destination_path} because it has no xywh"
+            )
+            continue
 
         class_id = row["class_id"]
         lines.append(f"{class_id} {' '.join(map(str, xywh))}")
@@ -199,7 +206,6 @@ def add_group_to_dataset_yolo_v8(
 
     dataset_folder = Path(dataset_folder)
     image_path = Path(image_path)
-    is_train = np.random.random() < 0.8
 
     if image_path.suffix not in [".jpg", ".jpeg", ".png"]:
         print(
@@ -207,7 +213,8 @@ def add_group_to_dataset_yolo_v8(
         )
         return
 
-    dataset = "train" if is_train else "valid"
+    # Use the dataset split from the DataFrame (not random)
+    dataset = detections["dataset"].iloc[0]  # All rows in group should have same split
 
     output_image_path = dataset_folder / dataset / "images" / image_path.name
     output_label_path = (

@@ -30,8 +30,9 @@ def encode_image(image_path: str | Image.Image) -> str:
 class LlamaCpp(BaseVisionLanguageModel):
     client: OpenAI
 
-    def __init__(self) -> None:
+    def __init__(self, system_prompt: str) -> None:
         self.client = OpenAI(base_url="http://127.0.0.1:5000/v1/")
+        super().__init__(system_prompt)
 
     def predict(self, prompt: str, images: list[Image.Image]) -> str:
         encoded_images = [encode_image(image) for image in images]
@@ -40,20 +41,21 @@ class LlamaCpp(BaseVisionLanguageModel):
             messages=[
                 {
                     "role": "system",
-                    "content": prompt,
+                    "content": [{"type": "text", "text": self.system_prompt}],
                 },
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}",
-                                "format": "jpeg",
-                                "detail": "low",
-                            },
-                        }
-                        for base64_image in encoded_images
+                        {"type": "text", "text": prompt},
+                        *[
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_image}",
+                                },
+                            }
+                            for base64_image in encoded_images
+                        ],
                     ],
                 },
             ],

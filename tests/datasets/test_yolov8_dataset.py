@@ -599,10 +599,32 @@ class TestYoloV8DatasetVisualization:
         assert result is sample_dataset
         plt.close("all")
 
-    def test_plot_class_not_implemented(self, sample_dataset):
-        """Test that plot_class raises NotImplementedError."""
-        with pytest.raises(NotImplementedError):
-            sample_dataset.plot_class("dog")
+    def test_plot_class_returns_self(self, sample_dataset, mocker):
+        """Test that plot_class returns self for method chaining."""
+        import matplotlib.pyplot as plt
+
+        # Mock the visualizer method to avoid needing real images
+        mock_plot = mocker.patch(
+            "action_labeler.datasets.yolov8_dataset.YoloV8DatasetVisualizer.plot_class_samples"
+        )
+
+        result = sample_dataset.plot_class("dog", num_samples=2)
+
+        # Verify the visualizer was called with correct arguments
+        mock_plot.assert_called_once_with(
+            sample_dataset.df,
+            sample_dataset.classes,
+            "dog",
+            0,  # dog class_id
+            2,
+        )
+        assert result is sample_dataset
+        plt.close("all")
+
+    def test_plot_class_raises_error_for_invalid_class(self, sample_dataset):
+        """Test that plot_class raises ClassNotFoundError for invalid class."""
+        with pytest.raises(ClassNotFoundError):
+            sample_dataset.plot_class("invalid_class")
 
 
 class TestYoloV8DatasetUtility:

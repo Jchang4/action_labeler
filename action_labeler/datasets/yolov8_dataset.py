@@ -619,7 +619,7 @@ class YoloV8Dataset:
         self.plot_bbox_size_distribution()
         return self
 
-    def plot_class(self, class_name: str, num_samples: int = 5) -> Self:  # noqa: ARG002
+    def plot_class(self, class_name: str, num_samples: int = 5) -> Self:
         """Plot sample images for a specific class.
 
         Args:
@@ -631,7 +631,6 @@ class YoloV8Dataset:
 
         Raises:
             ClassNotFoundError: If the class doesn't exist
-            NotImplementedError: This method is not yet implemented
 
         Example:
             >>> dataset.plot_class("dog", num_samples=10)
@@ -639,11 +638,11 @@ class YoloV8Dataset:
         if class_name not in self.class_name_to_id:
             raise ClassNotFoundError(class_name, self.classes)
 
-        # This would require image loading and drawing, which is more complex
-        raise NotImplementedError(
-            "plot_class is not yet implemented. "
-            "Consider using plot_class_distribution() instead."
+        class_id = self.class_name_to_id[class_name]
+        YoloV8DatasetVisualizer.plot_class_samples(
+            self.df, self.classes, class_name, class_id, num_samples
         )
+        return self
 
     def copy(self) -> Self:
         """Create a deep copy of the dataset.

@@ -72,7 +72,7 @@ class ActionLabeler:
                 print(f"No detections for {str(image_path)}")
                 continue
 
-            detections = Detection.from_text_path(txt_path, image.size)
+            detections = Detection.from_text_path(txt_path, image)
             if detections.is_empty():
                 print(f"No detections for {str(image_path)}")
                 continue

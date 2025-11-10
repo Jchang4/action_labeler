@@ -172,7 +172,11 @@ class LabelerDataset:
             )
             xyxys = [xywh_to_xyxy(xywh, image.size) for xywh in group]
             detections = Detection(
-                xyxy=xyxys, mask=None, class_id=class_id, image_size=image.size
+                xyxy=xyxys,
+                segmentation_points=[],
+                keypoints=np.array([]),
+                class_id=class_id,
+                image=image,
             )
             image_with_boxes = add_bounding_boxes(image, detections)
 

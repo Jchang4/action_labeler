@@ -124,12 +124,19 @@ class FolderImageProvider(IImageProvider):
         Yields:
             ImageData for each image with valid detections
         """
+        # Track what gets skipped
+        skipped_no_txt = 0
+        skipped_no_detections = 0
+        skipped_errors = 0
+        processed_count = 0
+
         for image_path in self.image_paths:
             # Load image
             try:
                 image = load_image(image_path)
             except Exception as e:
                 # Skip images that can't be loaded
+                skipped_errors += 1
                 print(f"Warning: Failed to load {image_path}: {e}")
                 continue
 
@@ -137,25 +144,42 @@ class FolderImageProvider(IImageProvider):
             txt_path = self._get_txt_path(Path(image_path))
             if not txt_path.exists():
                 # Skip images without detection files
+                skipped_no_txt += 1
                 continue
 
             try:
                 detections = Detection.from_text_path(txt_path, image)
             except Exception as e:
                 # Skip images with invalid detections
+                skipped_errors += 1
                 print(f"Warning: Failed to load detections for {image_path}: {e}")
                 continue
 
             # Skip images with no detections
             if len(detections.xyxy) == 0:
+                skipped_no_detections += 1
                 continue
 
+            processed_count += 1
             yield ImageData(
                 image_path=str(image_path),
                 image=image,
                 detections=detections,
                 metadata={"source": "folder", "folder": str(self.folder)},
             )
+
+        # Print summary at end
+        total_skipped = skipped_no_txt + skipped_no_detections + skipped_errors
+        if total_skipped > 0:
+            print(f"\n{'='*60}")
+            print(f"📊 Image Provider Summary for {self.folder.name}")
+            print(f"{'='*60}")
+            print(f"  ✅ Processed:          {processed_count}")
+            print(f"  ⚠️  Skipped (no .txt):  {skipped_no_txt}")
+            print(f"  ⚠️  Skipped (0 detect): {skipped_no_detections}")
+            print(f"  ❌ Skipped (errors):   {skipped_errors}")
+            print(f"  📁 Total in folder:    {len(self.image_paths)}")
+            print(f"{'='*60}\n")
 
     def __len__(self) -> int:
         """Get number of images (approximation - some may be skipped).

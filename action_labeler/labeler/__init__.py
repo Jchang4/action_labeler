@@ -1,4 +1,4 @@
-from .base import ActionLabeler, DetectionType
+from .analysis import ComparisonResult, DatasetAnalyzer, ExperimentComparator
 from .core import (
     CachedImageProvider,
     ExperimentConfig,
@@ -13,18 +13,14 @@ from .core import (
     get_processing_mode,
 )
 from .dataset import LabelerDataset
+from .export import YoloV8BalancedExporter, YoloV8Exporter
 from .labelers import ExperimentalLabeler, ProductionLabeler
 from .storage import LabelMetadata, LabelPersistence, LabelStore
 
 __all__ = [
-    "ActionLabeler",
-    "LabelerDataset",
-    "DetectionType",
-    "ExperimentalLabeler",
-    "ProductionLabeler",
-    "LabelStore",
-    "LabelMetadata",
-    "LabelPersistence",
+    "DatasetAnalyzer",
+    "ExperimentComparator",
+    "ComparisonResult",
     "ExperimentConfig",
     "ProcessingPipeline",
     "IProcessingMode",
@@ -36,4 +32,12 @@ __all__ = [
     "SubsetImageProvider",
     "CachedImageProvider",
     "FilteredImageProvider",
+    "ExperimentalLabeler",
+    "ProductionLabeler",
+    "LabelMetadata",
+    "LabelPersistence",
+    "LabelStore",
+    "LabelerDataset",
+    "YoloV8BalancedExporter",
+    "YoloV8Exporter",
 ]

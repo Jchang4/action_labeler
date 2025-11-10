@@ -18,13 +18,19 @@ class BasePrompt(ABC):
         numbered_classes: Whether to number the classes in the prompt.
     """
 
+    system_prompt: str
     template: str
     classes: list[str]
     numbered_classes: bool = False
 
     def __init__(
-        self, template: str, classes: list[str], numbered_classes: bool = False
+        self,
+        system_prompt: str,
+        template: str,
+        classes: list[str],
+        numbered_classes: bool = False,
     ):
+        self.system_prompt = system_prompt
         self.template = template
         self.classes = classes
         self.numbered_classes = numbered_classes
@@ -72,4 +78,4 @@ class BasePrompt(ABC):
             detections: The detections for the image.
             image_path: The path to the image.
         """
-        return self.template.format(classes=self.format_classes())
+        return self.template.format(classes=self.format_classes()).strip().strip("\n")

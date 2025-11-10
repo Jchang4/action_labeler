@@ -25,7 +25,7 @@ from action_labeler.labeler.core.processing_pipeline import (
     ProcessingPipeline,
 )
 from action_labeler.labeler.storage.label_store import LabelStore
-from action_labeler.labeler.storage.metadata import LabelMetadata, LabeledDetection
+from action_labeler.labeler.storage.metadata import LabeledDetection, LabelMetadata
 from action_labeler.labeler.storage.persistence import LabelPersistence
 
 
@@ -255,13 +255,13 @@ class ProductionLabeler:
         if unit.detection_index is None:
             # Batch mode: check if any detection is labeled
             for i in range(len(unit.detection.xyxy)):
-                xywh = unit.detection.xywh[i].tolist()
+                xywh = list(unit.detection.xywh[i])
                 if self.label_store.exists(image_path, xywh):
                     return True
             return False
         else:
             # Single detection mode
-            xywh = unit.detection.xywh[unit.detection_index].tolist()
+            xywh = list(unit.detection.xywh[unit.detection_index])
             return self.label_store.exists(image_path, xywh)
 
     def _create_labeled_detection(
@@ -278,16 +278,13 @@ class ProductionLabeler:
             LabeledDetection object
         """
         # Get detection coordinates
-        detection_idx = (
-            unit.detection_index if unit.detection_index is not None else 0
-        )
-        xywh = unit.detection.xywh[detection_idx].tolist()
+        detection_idx = unit.detection_index if unit.detection_index is not None else 0
+        xywh = list(unit.detection.xywh[detection_idx])
 
         # Get segmentation points
         seg_points = []
-        if (
+        if unit.detection.segmentation_points and detection_idx < len(
             unit.detection.segmentation_points
-            and detection_idx < len(unit.detection.segmentation_points)
         ):
             seg_points = unit.detection.segmentation_points[detection_idx]
 
@@ -425,7 +422,9 @@ class ProductionLabeler:
             print("\nLabel Distribution:")
             for label, count in sorted(
                 stats["label_distribution"].items(), key=lambda x: -x[1]
-            )[:10]:  # Top 10
+            )[
+                :10
+            ]:  # Top 10
                 print(f"  {label}: {count}")
             if len(stats["label_distribution"]) > 10:
                 print(f"  ... and {len(stats['label_distribution']) - 10} more")

@@ -23,7 +23,7 @@ from action_labeler.labeler.core.processing_modes import (
 )
 from action_labeler.labeler.core.processing_pipeline import ProcessingPipeline
 from action_labeler.labeler.storage.label_store import LabelStore
-from action_labeler.labeler.storage.metadata import LabelMetadata, LabeledDetection
+from action_labeler.labeler.storage.metadata import LabeledDetection, LabelMetadata
 
 
 class ExperimentalLabeler:
@@ -111,9 +111,7 @@ class ExperimentalLabeler:
 
             # Show preview if requested
             if show_preview:
-                self._show_preview(
-                    preprocessed_image, unit, image_data.image_path
-                )
+                self._show_preview(preprocessed_image, unit, image_data.image_path)
 
             # Generate prompt
             prompt = self.pipeline.generate_prompt(unit)
@@ -175,7 +173,11 @@ class ExperimentalLabeler:
         # Create progress bar
         iterator = self.image_provider
         if show_progress:
-            total = min(max_images, len(self.image_provider)) if max_images else len(self.image_provider)
+            total = (
+                min(max_images, len(self.image_provider))
+                if max_images
+                else len(self.image_provider)
+            )
             iterator = tqdm(
                 iterator,
                 total=total,
@@ -305,13 +307,13 @@ class ExperimentalLabeler:
         if unit.detection_index is None:
             # Check all detections in this image
             for i in range(len(unit.detection.xyxy)):
-                xywh = unit.detection.xywh[i].tolist()
+                xywh = list(unit.detection.xywh[i])
                 if self.label_store.exists(image_path, xywh):
                     return True
             return False
         else:
             # Single detection mode
-            xywh = unit.detection.xywh[unit.detection_index].tolist()
+            xywh = list(unit.detection.xywh[unit.detection_index])
             return self.label_store.exists(image_path, xywh)
 
     def _create_labeled_detection(
@@ -328,16 +330,13 @@ class ExperimentalLabeler:
             LabeledDetection object
         """
         # Get detection coordinates
-        detection_idx = (
-            unit.detection_index if unit.detection_index is not None else 0
-        )
-        xywh = unit.detection.xywh[detection_idx].tolist()
+        detection_idx = unit.detection_index if unit.detection_index is not None else 0
+        xywh = list(unit.detection.xywh[detection_idx])
 
         # Get segmentation points (if available)
         seg_points = []
-        if (
+        if unit.detection.segmentation_points and detection_idx < len(
             unit.detection.segmentation_points
-            and detection_idx < len(unit.detection.segmentation_points)
         ):
             seg_points = unit.detection.segmentation_points[detection_idx]
 
@@ -394,7 +393,9 @@ class ExperimentalLabeler:
 
             # Add title
             mode = self.processing_mode.get_name()
-            det_idx = unit.detection_index if unit.detection_index is not None else "all"
+            det_idx = (
+                unit.detection_index if unit.detection_index is not None else "all"
+            )
             plt.title(f"{Path(image_path).name} | Mode: {mode} | Detection: {det_idx}")
 
             plt.tight_layout()

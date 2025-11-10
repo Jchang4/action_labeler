@@ -13,6 +13,7 @@ from typing import Iterator
 from PIL import Image
 
 from action_labeler.detections.detection import Detection
+from action_labeler.helpers.detections_helpers import image_to_txt_path
 from action_labeler.helpers.general import get_image_paths, load_image
 
 
@@ -105,13 +106,17 @@ class FolderImageProvider(IImageProvider):
     def _get_txt_path(self, image_path: Path) -> Path:
         """Get the corresponding .txt file for an image.
 
+        Handles YOLO folder structure where:
+        - Images are in folder/images/*.jpg
+        - Labels are in folder/{detection_type}/*.txt
+
         Args:
             image_path: Path to image file
 
         Returns:
             Path to .txt file
         """
-        return image_path.with_suffix(".txt")
+        return image_to_txt_path(image_path, detection_type=self.detection_type)
 
     def __iter__(self) -> Iterator[ImageData]:
         """Iterate over images in the folder.
@@ -233,7 +238,9 @@ class CachedImageProvider(IImageProvider):
     Warning: Can use significant memory for large datasets.
     """
 
-    def __init__(self, base_provider: IImageProvider, max_cache_size: int | None = None):
+    def __init__(
+        self, base_provider: IImageProvider, max_cache_size: int | None = None
+    ):
         """Initialize cached provider.
 
         Args:

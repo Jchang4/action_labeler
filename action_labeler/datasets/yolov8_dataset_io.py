@@ -11,14 +11,14 @@ from tqdm.auto import tqdm
 
 from action_labeler.datasets.dataset_config import DatasetConfig
 from action_labeler.datasets.exceptions import DatasetIOError
-from action_labeler.helpers.general import get_image_paths
-from action_labeler.helpers.yolov8_dataset import (
+from action_labeler.datasets.helpers import (
     add_group_to_dataset_yolo_v8,
     create_dataset_folder,
     get_data_yaml,
     get_label_path,
     yolov8_labels_to_row,
 )
+from action_labeler.helpers.general import get_image_paths
 
 
 class YoloV8DatasetIO:

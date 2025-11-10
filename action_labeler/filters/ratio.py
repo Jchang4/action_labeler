@@ -5,7 +5,7 @@ from action_labeler.filters.base import IFilter
 
 
 class SmallDetectionsFilter(IFilter):
-    """Filter out detections that are too small relative to the image size."""
+    """Filter out detections that are too small relative to the image area."""
 
     min_area: float
 
@@ -29,7 +29,7 @@ class SmallDetectionsFilter(IFilter):
 
 
 class MinDetectionSizeFilter(IFilter):
-    """Approve detections that are a minimum size."""
+    """Approve detections that are a minimum area."""
 
     min_pixels: int
 
@@ -51,3 +51,27 @@ class MinDetectionSizeFilter(IFilter):
             return True
 
         return False
+
+
+class MaxDetectionSizeFilter(IFilter):
+    """Filter out detections that are too large relative to the image size."""
+
+    max_area: float
+
+    def __init__(self, max_area: float = 0.95):
+        self.max_area = max_area
+
+    def is_valid(
+        self,
+        image: Image.Image,
+        index: int,
+        detections: Detection,
+    ) -> bool:
+        xyxy = detections.xyxy[index]
+        x1, y1, x2, y2 = xyxy
+        box_width = x2 - x1
+        box_height = y2 - y1
+        box_area = box_width * box_height
+        image_area = image.width * image.height
+
+        return float(box_area) / float(image_area) <= self.max_area

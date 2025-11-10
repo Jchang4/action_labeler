@@ -47,6 +47,7 @@ dependencies = [
     "numpy",
     "pandas",
     "matplotlib",
+    "opencv-python",
 ]
 
 [project.optional-dependencies]
@@ -54,6 +55,7 @@ dev = [
     "jupyter",
     "notebook",
     "ipykernel",
+    "opencv-stubs",
 ]
 ai = [
     "openai",

@@ -19,7 +19,10 @@ class Gpt4oMini(BaseVisionLanguageModel):
     max_tokens: int
     sleep_time: int
 
-    def __init__(self, max_tokens: int = 1024, sleep_time: int = 5) -> None:
+    def __init__(
+        self, system_prompt: str, max_tokens: int = 1024, sleep_time: int = 5
+    ) -> None:
+        super().__init__(system_prompt)
         self.client = OpenAI()
         self.max_tokens = max_tokens
         self.sleep_time = sleep_time
@@ -39,6 +42,12 @@ class Gpt4oMini(BaseVisionLanguageModel):
             model="gpt-4o-mini",
             max_tokens=self.max_tokens,
             messages=[
+                {
+                    "role": "system",
+                    "content": [
+                        {"type": "text", "text": self.system_prompt.strip().strip("\n")}
+                    ],
+                },
                 {
                     "role": "user",
                     "content": [

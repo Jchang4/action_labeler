@@ -7,6 +7,9 @@ to maintain consistency and provide sensible defaults.
 from dataclasses import dataclass, field
 from typing import Literal
 
+import numpy as np
+import pandas as pd
+
 
 @dataclass(frozen=True)
 class DatasetConfig:
@@ -28,7 +31,7 @@ class DatasetConfig:
     random_seed: int | None = 42
     allowed_image_formats: tuple[str, ...] = (".jpg", ".jpeg", ".png")
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration values."""
         if not 0.0 <= self.train_split <= 1.0:
             raise ValueError(
@@ -44,6 +47,23 @@ class DatasetConfig:
                 f"got {self.train_split} + {self.valid_split} = "
                 f"{self.train_split + self.valid_split}"
             )
+
+    def get_rng(self) -> np.random.Generator:
+        """Get a random number generator with the configured seed.
+
+        Returns:
+            numpy random Generator instance
+
+        Example:
+            >>> config = DatasetConfig(random_seed=42)
+            >>> rng = config.get_rng()
+            >>> random_values = rng.random(10)
+        """
+        return (
+            np.random.default_rng(self.random_seed)
+            if self.random_seed is not None
+            else np.random.default_rng()
+        )
 
 
 @dataclass
@@ -135,3 +155,48 @@ class ValidationResult:
 
 MergeStrategy = Literal["union", "intersection"]
 SplitType = Literal["train", "valid"]
+
+
+def map_class_id_to_name(
+    class_id: int | float | None, classes: list[str], default: str = "background"
+) -> str:
+    """Map a class ID to its corresponding class name.
+
+    Args:
+        class_id: The class ID to map (can be None for background images)
+        classes: List of class names
+        default: Default value to return if class_id is None
+
+    Returns:
+        The class name corresponding to the ID, or default if None
+
+    Example:
+        >>> classes = ["dog", "cat", "bird"]
+        >>> map_class_id_to_name(0, classes)
+        'dog'
+        >>> map_class_id_to_name(None, classes)
+        'background'
+    """
+    return classes[int(class_id)] if pd.notna(class_id) else default
+
+
+def create_class_id_mapping(
+    class_id: int | float | None, class_name_to_id: dict[str, int]
+) -> int | None:
+    """Create a mapping function for class IDs during transformations.
+
+    This is used when remapping class IDs during merge or transformation operations.
+
+    Args:
+        class_id: The original class ID
+        class_name_to_id: Mapping from class names to new IDs
+
+    Returns:
+        The mapped class ID, or None if input is None
+
+    Example:
+        >>> mapping = {"dog": 0, "cat": 1}
+        >>> create_class_id_mapping(0, mapping)
+        0
+    """
+    return class_name_to_id.get(int(class_id)) if pd.notna(class_id) else None

@@ -3,12 +3,14 @@
 This module handles plotting and visualization of dataset information.
 """
 
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pathlib import Path
 from PIL import Image
 
+from action_labeler.datasets.dataset_config import map_class_id_to_name
 from action_labeler.detections.detection import Detection
 from action_labeler.helpers.image_helpers import add_bounding_boxes, add_text
 
@@ -30,10 +32,8 @@ class YoloV8DatasetVisualizer:
         # Create a single figure
         fig, ax = plt.subplots(figsize=(12, 6))
 
-        # Get class names for all samples
-        class_names = df["class_id"].apply(
-            lambda x: classes[int(x)] if pd.notna(x) else "background"
-        )
+        # Get class names for all samples using helper function
+        class_names = df["class_id"].apply(lambda x: map_class_id_to_name(x, classes))
 
         # Get counts for train and validation sets
         train_counts = class_names[df["dataset"] == "train"].value_counts()
@@ -212,25 +212,32 @@ class YoloV8DatasetVisualizer:
             img = Image.open(image_path)
             img_width, img_height = img.size
 
-            # Convert normalized xywh to pixel xyxy for all detections
-            xyxy_list = []
-            class_ids = []
-            for _, row in image_detections.iterrows():
-                if pd.notna(row["xywh"]):
-                    xywh = row["xywh"]
-                    # Convert normalized xywh to pixel xyxy
-                    x_center = xywh[0] * img_width
-                    y_center = xywh[1] * img_height
-                    width = xywh[2] * img_width
-                    height = xywh[3] * img_height
+            # Convert normalized xywh to pixel xyxy for all detections - VECTORIZED
+            # Filter out rows with NaN xywh
+            valid_mask = image_detections["xywh"].notna()
+            valid_detections = image_detections[valid_mask]
 
-                    x1 = x_center - width / 2
-                    y1 = y_center - height / 2
-                    x2 = x_center + width / 2
-                    y2 = y_center + height / 2
+            if len(valid_detections) > 0:
+                # Stack all xywh arrays into a single numpy array
+                xywh_array = np.vstack(valid_detections["xywh"].values)
+                class_ids_array = valid_detections["class_id"].values.astype(int)
 
-                    xyxy_list.append([x1, y1, x2, y2])
-                    class_ids.append(int(row["class_id"]))
+                # Vectorized conversion from normalized xywh to pixel xyxy
+                x_centers = xywh_array[:, 0] * img_width
+                y_centers = xywh_array[:, 1] * img_height
+                widths = xywh_array[:, 2] * img_width
+                heights = xywh_array[:, 3] * img_height
+
+                x1 = x_centers - widths / 2
+                y1 = y_centers - heights / 2
+                x2 = x_centers + widths / 2
+                y2 = y_centers + heights / 2
+
+                xyxy_list = np.column_stack([x1, y1, x2, y2]).tolist()
+                class_ids = class_ids_array.tolist()
+            else:
+                xyxy_list = []
+                class_ids = []
 
             # Create Detection object
             if xyxy_list:

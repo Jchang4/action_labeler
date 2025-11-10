@@ -42,8 +42,8 @@ class YoloV8DatasetIO:
         try:
             data_yaml = get_data_yaml(folder)
             classes = data_yaml["names"]
-        except Exception as e:
-            raise DatasetIOError(f"Failed to load data.yaml from {folder}: {e}")
+        except (FileNotFoundError, KeyError, ValueError, OSError) as e:
+            raise DatasetIOError(f"Failed to load data.yaml from {folder}: {e}") from e
 
         # Load images and text files
         data = []
@@ -68,7 +68,7 @@ class YoloV8DatasetIO:
                                 "class_id": int(row[0]),
                             }
                         )
-                except Exception as e:
+                except (FileNotFoundError, ValueError, IndexError, OSError) as e:
                     # Log but continue on individual file errors
                     print(f"Warning: Failed to load {label_path}: {e}")
                     continue
@@ -112,5 +112,5 @@ class YoloV8DatasetIO:
                     group,
                     dataset_folder=output_folder,
                 )
-        except Exception as e:
-            raise DatasetIOError(f"Failed to save dataset to {output_folder}: {e}")
+        except (OSError, PermissionError, ValueError) as e:
+            raise DatasetIOError(f"Failed to save dataset to {output_folder}: {e}") from e

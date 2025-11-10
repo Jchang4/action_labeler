@@ -195,11 +195,7 @@ class YoloV8DatasetTransformer:
 
         # Create a new dataframe with the balanced dataset
         data = []
-        rng = (
-            np.random.default_rng(config.random_seed)
-            if config.random_seed is not None
-            else np.random.default_rng()
-        )
+        rng = config.get_rng()
 
         for class_id, class_name in tqdm(
             enumerate(classes), total=len(classes), desc="Balancing classes"
@@ -273,12 +269,7 @@ class YoloV8DatasetTransformer:
         background_images_folder = Path(background_images_folder)
         background_images = get_image_paths(background_images_folder)
 
-        rng = (
-            np.random.default_rng(config.random_seed)
-            if config.random_seed is not None
-            else np.random.default_rng()
-        )
-
+        rng = config.get_rng()
         rng.shuffle(background_images)
 
         # Calculate number of background images to add

@@ -3,6 +3,7 @@
 This module handles validation of dataset integrity and data quality.
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -124,12 +125,29 @@ class YoloV8DatasetValidator:
                     f"Found {num_duplicates} potential duplicate detections"
                 )
 
-        # Check if image files exist
+        # Check if image files exist - OPTIMIZED with parallel execution
         if check_files_exist and "image_path" in df.columns:
+            unique_paths = df["image_path"].unique()
+
+            def check_file_exists(path: str) -> str | None:
+                """Check if a file exists, return path if missing."""
+                return path if not Path(path).exists() else None
+
             missing_files = []
-            for image_path in df["image_path"].unique():
-                if not Path(image_path).exists():
-                    missing_files.append(str(image_path))
+
+            # Use ThreadPoolExecutor for parallel file checks (I/O bound operation)
+            with ThreadPoolExecutor(max_workers=32) as executor:
+                # Submit all file checks
+                future_to_path = {
+                    executor.submit(check_file_exists, path): path
+                    for path in unique_paths
+                }
+
+                # Collect results as they complete
+                for future in as_completed(future_to_path):
+                    result = future.result()
+                    if result is not None:
+                        missing_files.append(result)
 
             if missing_files:
                 if len(missing_files) <= 5:

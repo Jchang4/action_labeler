@@ -94,6 +94,10 @@ class YoloV8Dataset:
             class_name: i for i, class_name in enumerate(classes)
         }
         self.df: pd.DataFrame = df
+        # NOTE: detection_type is stored but not currently enforced in validation or I/O.
+        # This parameter is reserved for future use when adding support for different
+        # detection formats (bounding boxes vs segmentation). Currently, both are supported
+        # in the same dataset without differentiation.
         self.detection_type: DetectionType = detection_type
         self.config: DatasetConfig = config if config is not None else DatasetConfig()
 
@@ -326,20 +330,20 @@ class YoloV8Dataset:
 
             new_class_name_to_id = {name: idx for idx, name in enumerate(new_classes)}
 
-            # Remap class IDs in both datasets
+            # Remap class IDs in both datasets - OPTIMIZED with map() instead of apply()
             df1 = self.df.copy()
-            df1["class_id"] = df1["class_id"].apply(
-                lambda x: (
-                    new_class_name_to_id[self.classes[int(x)]] if pd.notna(x) else x
-                )
-            )
+            # Create mapping dict for vectorized operation
+            old_to_new_1 = {
+                i: new_class_name_to_id[name] for i, name in enumerate(self.classes)
+            }
+            df1["class_id"] = df1["class_id"].map(old_to_new_1)
 
             df2 = other.df.copy()
-            df2["class_id"] = df2["class_id"].apply(
-                lambda x: (
-                    new_class_name_to_id[other.classes[int(x)]] if pd.notna(x) else x
-                )
-            )
+            # Create mapping dict for vectorized operation
+            old_to_new_2 = {
+                i: new_class_name_to_id[name] for i, name in enumerate(other.classes)
+            }
+            df2["class_id"] = df2["class_id"].map(old_to_new_2)
 
             # Combine dataframes
             merged_df = pd.concat([df1, df2], ignore_index=True)
@@ -358,28 +362,48 @@ class YoloV8Dataset:
                 name: idx for idx, name in enumerate(common_classes)
             }
 
-            # Filter and remap class IDs
+            # Filter and remap class IDs - OPTIMIZED with vectorized operations
+            # Create set for fast lookup
+            common_classes_set = set(common_classes)
+
+            # Get class IDs that correspond to common classes
+            common_class_ids_1 = {
+                i
+                for i, name in enumerate(self.classes)
+                if name in common_classes_set
+            }
+            common_class_ids_2 = {
+                i
+                for i, name in enumerate(other.classes)
+                if name in common_classes_set
+            }
+
+            # Filter dataframes - keep background (NaN) and common classes
             df1 = self.df[
-                self.df["class_id"].apply(
-                    lambda x: pd.isna(x) or self.classes[int(x)] in common_classes
-                )
+                self.df["class_id"].isna()
+                | self.df["class_id"].isin(common_class_ids_1)
             ].copy()
-            df1["class_id"] = df1["class_id"].apply(
-                lambda x: (
-                    new_class_name_to_id[self.classes[int(x)]] if pd.notna(x) else x
-                )
-            )
+
+            # Remap class IDs using map() for vectorized operation
+            old_to_new_1 = {
+                i: new_class_name_to_id[name]
+                for i, name in enumerate(self.classes)
+                if name in common_classes_set
+            }
+            df1["class_id"] = df1["class_id"].map(old_to_new_1)
 
             df2 = other.df[
-                other.df["class_id"].apply(
-                    lambda x: pd.isna(x) or other.classes[int(x)] in common_classes
-                )
+                other.df["class_id"].isna()
+                | other.df["class_id"].isin(common_class_ids_2)
             ].copy()
-            df2["class_id"] = df2["class_id"].apply(
-                lambda x: (
-                    new_class_name_to_id[other.classes[int(x)]] if pd.notna(x) else x
-                )
-            )
+
+            # Remap class IDs using map() for vectorized operation
+            old_to_new_2 = {
+                i: new_class_name_to_id[name]
+                for i, name in enumerate(other.classes)
+                if name in common_classes_set
+            }
+            df2["class_id"] = df2["class_id"].map(old_to_new_2)
 
             merged_df = pd.concat([df1, df2], ignore_index=True)
             new_classes = common_classes
@@ -515,14 +539,26 @@ class YoloV8Dataset:
         num_train_detections = len(train_df)
         num_valid_detections = len(valid_df)
 
-        # Class distribution
-        class_distribution = {}
-        images_per_class = {}
+        # Class distribution - optimized with groupby (single pass instead of N passes)
+        class_counts = self.df.groupby("class_id").size()
+        images_per_class_by_id = self.df.groupby("class_id")["image_path"].nunique()
 
-        for class_id, class_name in enumerate(self.classes):
-            class_df = self.df[self.df["class_id"] == class_id]
-            class_distribution[class_name] = len(class_df)
-            images_per_class[class_name] = class_df["image_path"].nunique()
+        class_distribution = {
+            self.classes[int(class_id)]: count
+            for class_id, count in class_counts.items()
+            if pd.notna(class_id)
+        }
+        images_per_class = {
+            self.classes[int(class_id)]: img_count
+            for class_id, img_count in images_per_class_by_id.items()
+            if pd.notna(class_id)
+        }
+
+        # Ensure all classes are represented (even with 0 counts)
+        for class_name in self.classes:
+            if class_name not in class_distribution:
+                class_distribution[class_name] = 0
+                images_per_class[class_name] = 0
 
         # Calculate averages and ranges
         avg_detections_per_image = (

@@ -55,29 +55,38 @@ class Detection:
             keypoints: Keypoints array, shape (N, K, 2) or empty array
             class_id: Class IDs, shape (N,)
             image: PIL.Image.Image object
+
+        Raises:
+            ValueError: If inputs are inconsistent or invalid
         """
-        # Validate inputs
+        # Validate image first
+        if image.size[0] <= 0 or image.size[1] <= 0:
+            raise ValueError("Image size must be positive")
+
         num_detections = len(xyxy)
-        assert (
-            len(segmentation_points) == num_detections
-        ), f"Mismatch: {num_detections} detections but {len(segmentation_points)} segmentation_points"
-        assert (
-            len(class_id) == num_detections
-        ), f"Mismatch: {num_detections} detections but {len(class_id)} class_ids"
 
-        if keypoints.size > 0:
-            assert (
-                keypoints.shape[0] == num_detections
-            ), f"Mismatch: {num_detections} detections but {keypoints.shape[0]} keypoint sets"
+        # Validate array shapes
+        if xyxy.shape != (num_detections, 4):
+            raise ValueError(
+                f"xyxy: expected shape ({num_detections}, 4), got {xyxy.shape}"
+            )
 
-        assert xyxy.shape == (
-            num_detections,
-            4,
-        ), f"Expected shape ({num_detections}, 4), got {xyxy.shape}"
-        assert class_id.shape == (
-            num_detections,
-        ), f"Expected shape ({num_detections},), got {class_id.shape}"
-        assert image.size[0] > 0 and image.size[1] > 0, "Image size must be positive"
+        if class_id.shape != (num_detections,):
+            raise ValueError(
+                f"class_id: expected shape ({num_detections},), got {class_id.shape}"
+            )
+
+        # Validate list lengths match num_detections
+        if len(segmentation_points) != num_detections:
+            raise ValueError(
+                f"segmentation_points: expected {num_detections} items, got {len(segmentation_points)}"
+            )
+
+        # Validate keypoints if present
+        if keypoints.size > 0 and keypoints.shape[0] != num_detections:
+            raise ValueError(
+                f"keypoints: expected {num_detections} keypoint sets, got {keypoints.shape[0]}"
+            )
 
         self.xyxy = xyxy
         self.segmentation_points = segmentation_points

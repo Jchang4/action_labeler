@@ -1,4 +1,5 @@
 from .analysis import ComparisonResult, DatasetAnalyzer, ExperimentComparator
+from .base import ActionLabeler, DetectionType
 from .core import (
     CachedImageProvider,
     ExperimentConfig,
@@ -18,6 +19,8 @@ from .labelers import ExperimentalLabeler, ProductionLabeler
 from .storage import LabelMetadata, LabelPersistence, LabelStore
 
 __all__ = [
+    "ActionLabeler",
+    "DetectionType",
     "DatasetAnalyzer",
     "ExperimentComparator",
     "ComparisonResult",

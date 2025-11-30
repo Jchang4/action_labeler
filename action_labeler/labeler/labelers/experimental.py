@@ -11,9 +11,11 @@ This labeler is designed for experimentation and iteration:
 from pathlib import Path
 from typing import Any
 
+import matplotlib.pyplot as plt
 from PIL import Image
 from tqdm.auto import tqdm
 
+from action_labeler.action_labeler.labeler.core import ModelResponse
 from action_labeler.labeler.core.experiment import ExperimentConfig
 from action_labeler.labeler.core.image_provider import IImageProvider, ImageData
 from action_labeler.labeler.core.processing_modes import (
@@ -24,6 +26,7 @@ from action_labeler.labeler.core.processing_modes import (
 from action_labeler.labeler.core.processing_pipeline import ProcessingPipeline
 from action_labeler.labeler.storage.label_store import LabelStore
 from action_labeler.labeler.storage.metadata import LabeledDetection, LabelMetadata
+from action_labeler.labeler.storage.persistence import LabelPersistence
 
 
 class ExperimentalLabeler:
@@ -133,18 +136,94 @@ class ExperimentalLabeler:
             if not response.is_valid:
                 self.stats["invalid_labels"] += 1
 
+            # Check if this is a batch response (multiple detections)
+            is_batch = response.metadata.get("batch_mode", False)
+
+            if is_batch:
+                # Handle batch response: split into individual detections
+                batch_detections = self._process_batch_response(
+                    unit, response, image_data.image_path
+                )
+                labeled_detections.extend(batch_detections)
+            else:
+                # Handle single detection response
+                labeled_detection = self._create_labeled_detection(
+                    unit, response, image_data.image_path
+                )
+
+                # Add to store
+                self.label_store.add(labeled_detection)
+                labeled_detections.append(labeled_detection)
+
+                self.stats["detections_labeled"] += 1
+
+        self.stats["images_processed"] += 1
+        return labeled_detections
+
+    def _process_batch_response(
+        self, unit: ProcessingUnit, response: ModelResponse, image_path: str
+    ) -> list[LabeledDetection]:
+        """Process a batch response and create individual labeled detections.
+
+        Args:
+            unit: Processing unit (contains all detections)
+            response: Model response with batch_labels in metadata
+            image_path: Path to source image
+
+        Returns:
+            List of labeled detections
+        """
+        labeled_detections = []
+
+        # Extract batch labels from response metadata
+        batch_labels = response.metadata.get("batch_labels", {})
+
+        if not batch_labels:
+            # No labels extracted (parsing may have failed)
+            return labeled_detections
+
+        # Create a labeled detection for each detection in the batch
+        for detection_idx, label in batch_labels.items():
+            # Get detection coordinates
+            xywh = list(unit.detection.xywh[detection_idx])
+
+            # Get segmentation points (if available)
+            seg_points = []
+            if unit.detection.segmentation_points and detection_idx < len(
+                unit.detection.segmentation_points
+            ):
+                seg_points = unit.detection.segmentation_points[detection_idx]
+
+            # Create metadata for this detection
+            metadata = LabelMetadata(
+                experiment_id=self.experiment.get_hash(),
+                model_name=self.experiment.model_name,
+                prompt_version=self.experiment.prompt_version,
+                processing_mode=self.processing_mode.get_name(),
+                confidence=response.confidence,
+                raw_model_response=response.raw_response,  # Same for all detections
+                is_valid=response.is_valid,
+                validation_error=response.validation_error,
+                preprocessors_applied=[
+                    p.__class__.__name__ for p in self.pipeline.preprocessors
+                ],
+                filters_applied=[f.__class__.__name__ for f in self.pipeline.filters],
+            )
+
             # Create labeled detection
-            labeled_detection = self._create_labeled_detection(
-                unit, response, image_data.image_path
+            labeled_detection = LabeledDetection(
+                image_path=image_path,
+                xywh=xywh,
+                segmentation_points=seg_points,
+                label=label,  # Individual label for this detection
+                metadata=metadata,
             )
 
             # Add to store
             self.label_store.add(labeled_detection)
             labeled_detections.append(labeled_detection)
-
             self.stats["detections_labeled"] += 1
 
-        self.stats["images_processed"] += 1
         return labeled_detections
 
     def label_all(
@@ -153,20 +232,53 @@ class ExperimentalLabeler:
         show_progress: bool = True,
         checkpoint_every: int = 10,
         checkpoint_path: str | Path | None = None,
+        overwrite: bool = False,
     ) -> LabelStore:
-        """Label all images from the provider.
+        """Label all images from the provider with automatic checkpoint resumption.
+
+        This method automatically resumes from an existing checkpoint if found,
+        making it safe to interrupt and restart labeling runs without losing progress.
 
         Args:
             max_images: Maximum number of images to process (None = all)
             show_progress: Whether to show progress bar
             checkpoint_every: Save checkpoint every N images
-            checkpoint_path: Path to save checkpoints (default: experiment_name_checkpoint.pkl)
+            checkpoint_path: Path to save/load checkpoints (default: experiment_name_checkpoint.pkl)
+            overwrite: If True, ignore existing checkpoint and start fresh (default: False)
 
         Returns:
             LabelStore with all labeled detections
+
+        Example:
+            >>> # Simple usage - auto-resumes if checkpoint exists
+            >>> label_store = labeler.label_all(
+            ...     checkpoint_every=100,
+            ...     checkpoint_path="checkpoint.pkl"
+            ... )
+            >>>
+            >>> # Force fresh start (ignore checkpoint)
+            >>> label_store = labeler.label_all(
+            ...     checkpoint_path="checkpoint.pkl",
+            ...     overwrite=True
+            ... )
         """
+        # Setup checkpoint path
         if checkpoint_path is None:
             checkpoint_path = f"{self.experiment.name}_checkpoint.pkl"
+        checkpoint_path = Path(checkpoint_path)
+
+        # Auto-resume from checkpoint if it exists (unless overwrite=True)
+        if checkpoint_path.exists() and not overwrite:
+            print(f"🔄 Resuming from checkpoint: {checkpoint_path}")
+            self.label_store = LabelPersistence.load(checkpoint_path)
+            existing_count = len(self.label_store.df)
+            print(f"   ✅ Loaded {existing_count} existing labels")
+            print("   ⏭️  Will skip already-labeled detections")
+        elif checkpoint_path.exists() and overwrite:
+            print("⚠️  Checkpoint exists but overwrite=True, starting fresh")
+            checkpoint_path.unlink()
+        else:
+            print("🆕 Starting fresh labeling run")
 
         images_processed = 0
 
@@ -184,24 +296,33 @@ class ExperimentalLabeler:
                 desc=f"Labeling ({self.experiment.name})",
             )
 
-        for image_data in iterator:
-            # Label this image
-            self.label_image(image_data)
+        try:
+            for image_data in iterator:
+                # Label this image (will skip already-labeled detections)
+                self.label_image(image_data)
 
-            images_processed += 1
+                images_processed += 1
 
-            # Checkpoint
-            if checkpoint_every and images_processed % checkpoint_every == 0:
+                # Checkpoint
+                if checkpoint_every and images_processed % checkpoint_every == 0:
+                    self._save_checkpoint(checkpoint_path)
+
+                # Check max limit
+                if max_images and images_processed >= max_images:
+                    break
+
+            # Final save
+            self.label_store.flush()
+            if checkpoint_path:
                 self._save_checkpoint(checkpoint_path)
 
-            # Check max limit
-            if max_images and images_processed >= max_images:
-                break
-
-        # Final save
-        self.label_store.flush()
-        if checkpoint_path:
+        except KeyboardInterrupt:
+            # Save on interruption
+            print("\n⚠️  Interrupted! Saving checkpoint...")
             self._save_checkpoint(checkpoint_path)
+            print(f"   ✅ Checkpoint saved to: {checkpoint_path}")
+            print("   ℹ️  Run again to resume from this point")
+            raise
 
         return self.label_store
 
@@ -317,7 +438,7 @@ class ExperimentalLabeler:
             return self.label_store.exists(image_path, xywh)
 
     def _create_labeled_detection(
-        self, unit: ProcessingUnit, response: Any, image_path: str
+        self, unit: ProcessingUnit, response: ModelResponse, image_path: str
     ) -> LabeledDetection:
         """Create a LabeledDetection from processing results.
 
@@ -370,8 +491,6 @@ class ExperimentalLabeler:
         Args:
             path: Path to save checkpoint
         """
-        from action_labeler.labeler.storage.persistence import LabelPersistence
-
         LabelPersistence.save(self.label_store, path)
 
     def _show_preview(
@@ -385,8 +504,6 @@ class ExperimentalLabeler:
             image_path: Path to source image
         """
         try:
-            import matplotlib.pyplot as plt
-
             plt.figure(figsize=(10, 10))
             plt.imshow(image)
             plt.axis("off")

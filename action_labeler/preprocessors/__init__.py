@@ -1,3 +1,4 @@
+from .batch_text import AllNumberedBoundingBoxPreprocessor, AllTextPreprocessor
 from .bounding_box import AllBoundingBoxesPreprocessor, BoundingBoxPreprocessor
 from .crop import CropPreprocessor
 from .mask import MaskPreprocessor
@@ -11,4 +12,6 @@ __all__ = [
     "MaskPreprocessor",
     "ResizePreprocessor",
     "TextPreprocessor",
+    "AllTextPreprocessor",
+    "AllNumberedBoundingBoxPreprocessor",
 ]

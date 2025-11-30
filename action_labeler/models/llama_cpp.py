@@ -29,10 +29,12 @@ def encode_image(image_path: str | Image.Image) -> str:
 
 class LlamaCpp(BaseVisionLanguageModel):
     client: OpenAI
+    max_tokens: int
 
-    def __init__(self, system_prompt: str) -> None:
-        self.client = OpenAI(base_url="http://127.0.0.1:5000/v1/")
+    def __init__(self, system_prompt: str, max_tokens: int = 4096) -> None:
         super().__init__(system_prompt)
+        self.client = OpenAI(base_url="http://127.0.0.1:5000/v1/")
+        self.max_tokens = max_tokens
 
     def predict(self, prompt: str, images: list[Image.Image]) -> str:
         encoded_images = [encode_image(image) for image in images]
@@ -59,6 +61,6 @@ class LlamaCpp(BaseVisionLanguageModel):
                     ],
                 },
             ],
-            max_tokens=4096,
+            max_tokens=self.max_tokens,
         )
         return response.choices[0].message.content

@@ -225,7 +225,9 @@ class DatasetAnalyzer:
             figsize: Figure size
         """
         # Get detections with this label
-        label_df = self.label_store.df[self.label_store.df["label"] == label]
+        label_df = self.label_store.df[self.label_store.df["label"] == label].sample(
+            frac=1
+        )
 
         if len(label_df) == 0:
             print(f"No detections found with label '{label}'")

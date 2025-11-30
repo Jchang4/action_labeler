@@ -194,6 +194,125 @@ class LabelerDataset:
 
         return self
 
+    def plot_classes(
+        self,
+        classes: list[str] | None = None,
+        num_images_per_class: int = 3,
+        ncols: int = 3,
+        figsize: tuple[int, int] | None = None,
+    ) -> "LabelerDataset":
+        """Plot sample images for multiple classes with bounding boxes.
+        
+        Args:
+            classes: List of class names to plot. If None, plots all classes.
+            num_images_per_class: Number of sample images to show per class.
+            ncols: Number of columns in the grid layout.
+            figsize: Figure size as (width, height). Auto-calculated if None.
+        
+        Returns:
+            Self for method chaining.
+        """
+        # Determine which classes to plot
+        if classes is None:
+            classes = sorted(self.df["action"].unique())
+        
+        # Filter to only classes that exist in the dataset
+        classes = [c for c in classes if c in self.df["action"].values]
+        
+        if not classes:
+            print("No valid classes found to plot")
+            return self
+        
+        # Calculate layout
+        total_images = len(classes) * num_images_per_class
+        nrows = int(np.ceil(total_images / ncols))
+        
+        # Set figure size
+        if figsize is None:
+            figsize = (ncols * 5, nrows * 4)
+        
+        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
+        
+        # Flatten axes for easier indexing
+        if nrows == 1 and ncols == 1:
+            axes = np.array([axes])
+        axes = axes.flatten() if isinstance(axes, np.ndarray) else [axes]
+        
+        plot_idx = 0
+        
+        # Plot images for each class
+        for class_name in classes:
+            class_df = self.df[self.df["action"] == class_name]
+            
+            # Get unique image paths for this class
+            unique_images = class_df["image_path"].unique()
+            
+            # Sample images (up to num_images_per_class)
+            num_to_sample = min(num_images_per_class, len(unique_images))
+            sampled_paths = np.random.choice(
+                unique_images, size=num_to_sample, replace=False
+            )
+            
+            # Plot each sampled image
+            for image_path in sampled_paths:
+                if plot_idx >= len(axes):
+                    break
+                
+                ax = axes[plot_idx]
+                
+                try:
+                    # Load image
+                    image = Image.open(image_path)
+                    
+                    # Get all detections for this image from this class
+                    image_df = class_df[class_df["image_path"] == image_path]
+                    
+                    # Convert xywh to xyxy for all detections
+                    group = image_df["xywh"].tolist()
+                    xyxys = [xywh_to_xyxy(xywh, image.size) for xywh in group]
+                    
+                    # Get class_id
+                    class_id = (
+                        self.classes.index(class_name)
+                        if class_name in self.classes
+                        else 0
+                    )
+                    
+                    # Create Detection object
+                    detections = Detection(
+                        xyxy=xyxys,
+                        segmentation_points=[],
+                        keypoints=np.array([]),
+                        class_id=class_id,
+                        image=image,
+                    )
+                    
+                    # Add bounding boxes to image
+                    image_with_boxes = add_bounding_boxes(image, detections)
+                    
+                    # Display image
+                    ax.imshow(image_with_boxes)
+                    ax.set_title(
+                        f"{class_name}\n{Path(image_path).name}",
+                        fontsize=10,
+                    )
+                    ax.axis("off")
+                    
+                except Exception as e:
+                    print(f"Error loading {image_path}: {e}")
+                    ax.axis("off")
+                
+                plot_idx += 1
+        
+        # Hide unused subplots
+        for idx in range(plot_idx, len(axes)):
+            axes[idx].axis("off")
+        
+        plt.tight_layout()
+        plt.show()
+        
+        return self
+
     def __repr__(self):
         return f"LabelerDataset(folder={self.folder}, filename={self.filename}, classes={len(self.classes)})"
 

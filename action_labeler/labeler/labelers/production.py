@@ -2,9 +2,10 @@
 
 This labeler is optimized for processing large datasets:
 - Efficient batch processing
-- Automatic checkpointing
+- Automatic checkpointing with auto-resume
 - Progress tracking and statistics
-- Resume from interruptions
+- Graceful error handling (continues on errors)
+- Resume from interruptions (automatic by default)
 - Optimized for throughput over interactivity
 """
 
@@ -40,10 +41,11 @@ class ProductionLabeler:
 
     Key features:
     - Automatic checkpointing every N images
-    - Resume from previous checkpoints
+    - Auto-resume from latest checkpoint (default behavior)
+    - Graceful error handling (continues on errors)
     - Detailed statistics tracking
     - Efficient batch processing
-    - Experiment run tracking
+    - Experiment run tracking with unique IDs
     """
 
     def __init__(
@@ -96,26 +98,65 @@ class ProductionLabeler:
         save_final: bool = True,
         output_path: str | Path | None = None,
         resume_from: str | Path | None = None,
+        auto_resume: bool = True,
+        overwrite: bool = False,
     ) -> LabelStore:
-        """Label entire dataset with automatic checkpointing.
+        """Label entire dataset with automatic checkpoint resumption.
+
+        By default, automatically resumes from the latest checkpoint if found,
+        making it safe to interrupt and restart labeling runs without losing progress.
 
         Args:
             checkpoint_every: Save checkpoint every N images
             save_final: Whether to save final results
             output_path: Path for final results (default: experiment_name.pkl)
-            resume_from: Path to checkpoint to resume from
+            resume_from: Explicit path to checkpoint to resume from (overrides auto_resume)
+            auto_resume: If True, automatically resume from latest checkpoint (default: True)
+            overwrite: If True, clear all checkpoints and start fresh (default: False)
 
         Returns:
             LabelStore with all labeled detections
+
+        Example:
+            >>> # Simple usage - auto-resumes from latest checkpoint
+            >>> labeler.label_dataset()
+            >>>
+            >>> # Force fresh start (clear all checkpoints)
+            >>> labeler.label_dataset(overwrite=True)
+            >>>
+            >>> # Resume from specific checkpoint
+            >>> labeler.label_dataset(resume_from="checkpoint_500.pkl")
+            >>>
+            >>> # Disable auto-resume
+            >>> labeler.label_dataset(auto_resume=False)
         """
         # Setup output path
         if output_path is None:
             output_path = self.checkpoint_dir / f"{self.experiment.name}.pkl"
         output_path = Path(output_path)
 
-        # Resume from checkpoint if provided
-        if resume_from:
+        # Handle checkpoint resumption with priority: overwrite > resume_from > auto_resume
+        if overwrite:
+            # Clear all existing checkpoints and start fresh
+            self._clear_checkpoints()
+            print("🆕 Starting fresh (all checkpoints cleared)")
+        elif resume_from:
+            # Explicit checkpoint specified - use it
+            print(f"🔄 Resuming from specified checkpoint: {resume_from}")
             self._resume_from_checkpoint(resume_from)
+        elif auto_resume:
+            # Auto-detect and resume from latest checkpoint
+            latest_checkpoint = self._find_latest_checkpoint()
+            if latest_checkpoint:
+                print(
+                    f"🔄 Auto-resuming from latest checkpoint: {latest_checkpoint.name}"
+                )
+                self._resume_from_checkpoint(latest_checkpoint)
+            else:
+                print("🆕 No checkpoints found, starting fresh")
+        else:
+            # auto_resume=False and no explicit checkpoint - start fresh
+            print("🆕 Starting fresh (auto_resume disabled)")
 
         # Initialize experiment run
         self.experiment_run = ExperimentRun(
@@ -230,11 +271,85 @@ class ProductionLabeler:
             if not response.is_valid:
                 self.stats["invalid_labels"] += 1
 
-            # Create and store labeled detection
-            labeled_detection = self._create_labeled_detection(
-                unit, response, image_data.image_path
+            # Check if this is a batch response (multiple detections)
+            is_batch = response.metadata.get("batch_mode", False)
+
+            if is_batch:
+                # Handle batch response: split into individual detections
+                labeled_count += self._process_batch_response(
+                    unit, response, image_data.image_path
+                )
+            else:
+                # Handle single detection response
+                labeled_detection = self._create_labeled_detection(
+                    unit, response, image_data.image_path
+                )
+                self.label_store.add(labeled_detection)
+                labeled_count += 1
+                self.stats["detections_labeled"] += 1
+
+        return labeled_count
+
+    def _process_batch_response(
+        self, unit: ProcessingUnit, response: ModelResponse, image_path: str
+    ) -> int:
+        """Process a batch response and create individual labeled detections.
+
+        Args:
+            unit: Processing unit (contains all detections)
+            response: Model response with batch_labels in metadata
+            image_path: Path to source image
+
+        Returns:
+            Number of detections labeled
+        """
+        labeled_count = 0
+
+        # Extract batch labels from response metadata
+        batch_labels = response.metadata.get("batch_labels", {})
+
+        if not batch_labels:
+            # No labels extracted (parsing may have failed)
+            return 0
+
+        # Create a labeled detection for each detection in the batch
+        for detection_idx, label in batch_labels.items():
+            # Get detection coordinates
+            xywh = list(unit.detection.xywh[detection_idx])
+
+            # Get segmentation points (if available)
+            seg_points = []
+            if unit.detection.segmentation_points and detection_idx < len(
+                unit.detection.segmentation_points
+            ):
+                seg_points = unit.detection.segmentation_points[detection_idx]
+
+            # Create metadata for this detection
+            metadata = LabelMetadata(
+                experiment_id=self.experiment.get_hash(),
+                model_name=self.experiment.model_name,
+                prompt_version=self.experiment.prompt_version,
+                processing_mode=self.processing_mode.get_name(),
+                confidence=response.confidence,
+                raw_model_response=response.raw_response,  # Same for all detections
+                is_valid=response.is_valid,
+                validation_error=response.validation_error,
+                preprocessors_applied=[
+                    p.__class__.__name__ for p in self.pipeline.preprocessors
+                ],
+                filters_applied=[f.__class__.__name__ for f in self.pipeline.filters],
             )
 
+            # Create labeled detection
+            labeled_detection = LabeledDetection(
+                image_path=image_path,
+                xywh=xywh,
+                segmentation_points=seg_points,
+                label=label,  # Individual label for this detection
+                metadata=metadata,
+            )
+
+            # Add to store
             self.label_store.add(labeled_detection)
             labeled_count += 1
             self.stats["detections_labeled"] += 1
@@ -368,6 +483,41 @@ class ProductionLabeler:
         print(f"Resumed from checkpoint: {checkpoint_path}")
         print(f"Previously processed: {self.stats['images_processed']} images")
         print(f"Previously labeled: {self.stats['detections_labeled']} detections")
+
+    def _find_latest_checkpoint(self) -> Path | None:
+        """Find the most recent checkpoint in checkpoint_dir.
+
+        Returns:
+            Path to latest checkpoint, or None if no checkpoints found
+        """
+        pattern = f"{self.experiment.name}_checkpoint_*.pkl"
+        checkpoints = list(self.checkpoint_dir.glob(pattern))
+
+        if not checkpoints:
+            return None
+
+        # Sort by the numeric suffix (images_processed count)
+        def get_checkpoint_number(path: Path) -> int:
+            try:
+                # Extract number from "experiment_checkpoint_100.pkl"
+                return int(path.stem.split("_")[-1])
+            except (ValueError, IndexError):
+                return 0
+
+        checkpoints.sort(key=get_checkpoint_number)
+        return checkpoints[-1]  # Return the latest
+
+    def _clear_checkpoints(self) -> None:
+        """Delete all checkpoints for this experiment."""
+        pattern = f"{self.experiment.name}_checkpoint_*"
+        deleted_count = 0
+
+        for path in self.checkpoint_dir.glob(pattern):
+            path.unlink()
+            deleted_count += 1
+
+        if deleted_count > 0:
+            print(f"   🗑️  Deleted {deleted_count} checkpoint file(s)")
 
     def _generate_run_id(self) -> str:
         """Generate unique run ID.

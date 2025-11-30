@@ -62,7 +62,8 @@ class YoloV8Exporter(IDatasetExporter):
         is_valid, errors = self.validate_export(label_store)
         if not is_valid:
             raise ValueError(
-                f"Cannot export to YOLO format:\n" + "\n".join(f"  - {e}" for e in errors)
+                f"Cannot export to YOLO format:\n"
+                + "\n".join(f"  - {e}" for e in errors)
             )
 
         # Create directory structure
@@ -276,7 +277,7 @@ class YoloV8Exporter(IDatasetExporter):
             "path": str(output_path.absolute()),
             "train": "train/images",
             "val": "valid/images",
-            "names": {i: name for i, name in enumerate(classes)},
+            "names": classes,
         }
 
         yaml_path = output_path / "data.yaml"
@@ -339,9 +340,7 @@ class YoloV8BalancedExporter(YoloV8Exporter):
         class_counts = df["label"].value_counts()
 
         # Determine target count
-        target_count = (
-            self.min_samples if self.min_samples else int(class_counts.min())
-        )
+        target_count = self.min_samples if self.min_samples else int(class_counts.min())
 
         # Sample from each class
         balanced_rows = []
@@ -352,7 +351,9 @@ class YoloV8BalancedExporter(YoloV8Exporter):
 
             if len(label_df) > target_count:
                 # Downsample
-                sampled_df = label_df.sample(n=target_count, random_state=rng.integers(0, 2**31))
+                sampled_df = label_df.sample(
+                    n=target_count, random_state=rng.integers(0, 2**31)
+                )
             else:
                 # Keep all (could also upsample if desired)
                 sampled_df = label_df
@@ -366,8 +367,8 @@ class YoloV8BalancedExporter(YoloV8Exporter):
         # We need to reconstruct LabeledDetection objects
         # For simplicity, create a new store with minimal metadata
         from action_labeler.labeler.storage.metadata import (
-            LabelMetadata,
             LabeledDetection,
+            LabelMetadata,
         )
 
         balanced_store = LabelStore()

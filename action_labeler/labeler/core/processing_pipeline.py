@@ -125,12 +125,13 @@ class ProcessingPipeline:
         """
         image = unit.image
 
-        # Only preprocess if we have a specific detection index
-        # Batch mode typically uses the original image
-        if unit.detection_index is None or not self.preprocessors:
+        # If no preprocessors, return original image
+        if not self.preprocessors:
             return image
 
         # Apply preprocessors sequentially
+        # For batch mode (detection_index=None), preprocessors should handle all detections
+        # For single mode, preprocessors process the specific detection at detection_index
         for preprocessor in self.preprocessors:
             image = preprocessor.preprocess(
                 image, unit.detection_index, unit.detection

@@ -161,7 +161,7 @@ class DetectionManager:
         target_dir.mkdir(exist_ok=True, parents=True)
 
         # Source directory where YOLO saves detections (inside UUID folder)
-        source_dir = run_dir / "predict" / "labels"
+        source_dir = run_dir / "labels"
 
         if not source_dir.exists():
             print(f"⚠️  No detections found in {source_dir}")

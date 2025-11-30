@@ -208,7 +208,9 @@ class ExperimentRun:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ExperimentRun":
         """Create from dictionary."""
-        data["experiment_config"] = ExperimentConfig.from_dict(data["experiment_config"])
+        data["experiment_config"] = ExperimentConfig.from_dict(
+            data["experiment_config"]
+        )
         return cls(**data)
 
 

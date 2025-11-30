@@ -1,3 +1,4 @@
+from .batch_parser import BatchResponseParser, HybridResponseParser
 from .experiment import ExperimentConfig
 from .image_provider import (
     CachedImageProvider,
@@ -8,7 +9,11 @@ from .image_provider import (
     SubsetImageProvider,
 )
 from .processing_modes import IProcessingMode, ProcessingUnit, get_processing_mode
-from .processing_pipeline import ProcessingPipeline
+from .processing_pipeline import (
+    IResponseParser,
+    ModelResponse,
+    ProcessingPipeline,
+)
 
 __all__ = [
     "ExperimentConfig",
@@ -22,4 +27,8 @@ __all__ = [
     "SubsetImageProvider",
     "CachedImageProvider",
     "FilteredImageProvider",
+    "BatchResponseParser",
+    "HybridResponseParser",
+    "IResponseParser",
+    "ModelResponse",
 ]

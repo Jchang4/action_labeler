@@ -47,8 +47,9 @@ def draw_bounding_box(
 
     # Add label to center
     if show_label:
-        # Font Size 20
-        font = ImageFont.load_default(size=20)
+        # Scale text to image size
+        largest_dim = max(image.width, image.height)
+        font = ImageFont.load_default(size=int(largest_dim * 0.03))
         center_x = (xyxy[0] + xyxy[2]) / 2
         center_y = (xyxy[1] + xyxy[3]) / 2
         draw.text((center_x, center_y), detection.label, fill=color, font=font)

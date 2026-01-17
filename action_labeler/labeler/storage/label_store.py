@@ -4,7 +4,6 @@ This module provides efficient storage and retrieval of labeled detections
 with proper indexing and deduplication.
 """
 
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -48,9 +47,7 @@ class LabelStore:
             True if added, False if duplicate (already exists)
         """
         # Check for duplicates using index
-        detection_key = self._get_detection_key(
-            detection.image_path, detection.xywh
-        )
+        detection_key = self._get_detection_key(detection.image_path, detection.xywh)
 
         if detection_key in self._detection_index:
             return False  # Duplicate
@@ -252,7 +249,9 @@ class LabelStore:
         # Experiment distribution
         experiment_counts = {}
         for m in metadata_list:
-            experiment_counts[m.experiment_id] = experiment_counts.get(m.experiment_id, 0) + 1
+            experiment_counts[m.experiment_id] = (
+                experiment_counts.get(m.experiment_id, 0) + 1
+            )
 
         return {
             "total_labels": len(self.df),
@@ -279,9 +278,7 @@ class LabelStore:
         """
         return len(self.df) + len(self._batch_buffer)
 
-    def _get_detection_key(
-        self, image_path: str, xywh: list[float]
-    ) -> tuple[str, str]:
+    def _get_detection_key(self, image_path: str, xywh: list[float]) -> tuple[str, str]:
         """Create a hashable key for a detection.
 
         Args:

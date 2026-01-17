@@ -6,12 +6,16 @@ Batch prompts define:
 3. How to parse responses back to individual detection labels
 """
 
+import json
+import logging
+import re
 from abc import abstractmethod
 from pathlib import Path
-from typing import Any
 
 from action_labeler.detections.detection import Detection
 from action_labeler.prompt.base import BasePrompt
+
+logger = logging.getLogger(__name__)
 
 
 class BatchPrompt(BasePrompt):
@@ -68,12 +72,14 @@ class BatchPrompt(BasePrompt):
         """
         num_detections = len(detections.xyxy)
 
-        prompt = self.template.format(
-            classes=self.format_classes(),
-            num_detections=num_detections,
-        )
-
-        return prompt.strip()
+        try:
+            prompt = self.template.format(
+                classes=self.format_classes(),
+                num_detections=num_detections,
+            )
+            return prompt.strip()
+        except Exception as _e:
+            return self.template
 
     @abstractmethod
     def parse_batch_response(
@@ -183,8 +189,6 @@ class JSONBatchPrompt(BatchPrompt):
         Raises:
             ValueError: If JSON is invalid or missing required fields
         """
-        import json
-
         # Clean up response (remove code fences)
         cleaned = raw_response.strip()
         if cleaned.startswith("```json"):
@@ -280,8 +284,6 @@ class TextBatchPrompt(BatchPrompt):
         Raises:
             ValueError: If format is invalid
         """
-        import re
-
         result = {}
 
         # Try to match lines with patterns like:

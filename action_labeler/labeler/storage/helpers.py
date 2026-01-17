@@ -3,6 +3,19 @@ from PIL import Image, ImageDraw, ImageFont
 from action_labeler.action_labeler.helpers.detections_helpers import xywh_to_xyxy
 from action_labeler.action_labeler.labeler.storage.metadata import LabeledDetection
 
+COLORS = [
+    "red",
+    "green",
+    "blue",
+    "yellow",
+    "orange",
+    "cyan",
+    "magenta",
+    "lime",
+    "navy",
+    "maroon",
+]
+
 
 def draw_bounding_box(
     image: Image.Image,
@@ -62,6 +75,8 @@ def get_image_with_detections(
             raise ValueError("Image paths must be the same for all detections")
 
     image = Image.open(image_path)
-    for detection in detections:
-        image = draw_bounding_box(image, detection, show_label=show_label)
+    for i, detection in enumerate(detections):
+        image = draw_bounding_box(
+            image, detection, show_label=show_label, color=COLORS[i]
+        )
     return image

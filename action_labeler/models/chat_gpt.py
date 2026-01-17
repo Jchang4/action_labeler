@@ -8,21 +8,37 @@ try:
     from openai import OpenAI
 except ImportError:
     raise ImportError(
-        "Gpt4oMini requires the openai package. Please install it with `pip install openai`."
+        "ChatGPT requires the openai package. Please install it with `pip install openai`."
     )
 
 from .base import BaseVisionLanguageModel
 
 
-class Gpt4oMini(BaseVisionLanguageModel):
+class ChatGPT(BaseVisionLanguageModel):
+    """
+    ChatGPT model wrapper.
+
+    Args:
+        model: The model to use.
+        system_prompt: The system prompt to use.
+        max_tokens: The maximum number of tokens to generate.
+        sleep_time: The time to sleep after generating a response.
+    """
+
+    model: str
     client: OpenAI
     max_tokens: int
     sleep_time: int
 
     def __init__(
-        self, system_prompt: str, max_tokens: int = 1024, sleep_time: int = 5
+        self,
+        model: str,
+        system_prompt: str,
+        max_tokens: int = 1024,
+        sleep_time: int = 5,
     ) -> None:
         super().__init__(system_prompt)
+        self.model = model
         self.client = OpenAI()
         self.max_tokens = max_tokens
         self.sleep_time = sleep_time
@@ -34,13 +50,20 @@ class Gpt4oMini(BaseVisionLanguageModel):
 
         img_byte_arrs = []
         for image in images:
+            # Resize so largest dimension is 1024px
+            max_dim = max(image.size)
+            scale = 1024 / max_dim
+            image = image.resize(
+                (int(image.size[0] * scale), int(image.size[1] * scale))
+            )
+            # Save to byte array
             img_byte_arr = io.BytesIO()
             image.save(img_byte_arr, format="JPEG")
             img_byte_arrs.append(img_byte_arr.getvalue())
 
         response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
-            max_tokens=self.max_tokens,
+            model=self.model,
+            max_completion_tokens=self.max_tokens,
             messages=[
                 {
                     "role": "system",

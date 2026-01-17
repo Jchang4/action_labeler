@@ -1,4 +1,4 @@
-from .chat_gpt import Gpt4oMini
+from .chat_gpt import ChatGPT
 from .llama_cpp import LlamaCpp
 
-__all__ = ["Gpt4oMini", "LlamaCpp"]
+__all__ = ["ChatGPT", "LlamaCpp"]

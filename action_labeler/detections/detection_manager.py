@@ -52,13 +52,15 @@ class DetectionManager:
         batch: int = 64,
         classes: list[int] | None = None,
         conf: float = 0.25,
-        temp_dir: str = "runs/temp",
+        temp_dir: str = "./runs/temp",
     ):
         self.model_name = model_name
         self.batch = batch
         self.classes = classes if classes is not None else [0]
         self.conf = conf
-        self.temp_dir = Path(temp_dir)
+        self.temp_dir = Path(
+            temp_dir
+        ).resolve()  # Use absolute path to prevent YOLO prepending default project
         self.model = None  # Lazy load on first detect() call
 
     def detect(
@@ -122,7 +124,7 @@ class DetectionManager:
             self.model = YOLO(self.model_name)
 
         # Run prediction with streaming for memory efficiency
-        # YOLO will create: run_dir/predict/labels/*.txt
+        # YOLO will create: run_dir/labels/*.txt
         results = self.model.predict(
             images_path,
             classes=self.classes,

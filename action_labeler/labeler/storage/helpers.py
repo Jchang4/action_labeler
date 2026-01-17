@@ -56,17 +56,17 @@ def draw_bounding_box(
     return image
 
 
-def get_image_with_detections(
+def get_image_with_bboxes(
     detections: list[LabeledDetection],
     show_label: bool = False,
 ) -> Image.Image:
-    """Get an image with detections overlaid on it.
+    """Get an image with bounding boxes overlaid on it.
 
     Args:
         detections: List of LabeledDetection objects
 
     Returns:
-        Image with detections overlaid on it
+        Image with bounding boxes overlaid on it
     """
     # Ensure image_path is same for all detections
     image_path = detections[0].image_path

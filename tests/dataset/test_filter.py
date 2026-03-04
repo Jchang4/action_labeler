@@ -3,7 +3,6 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from action_labeler.dataset import Dataset, DatasetColumns
-from action_labeler.labeler import LabelResult
 from action_labeler.types import Detection
 
 
@@ -27,15 +26,14 @@ class StubResponse(BaseModel):
 
 def _make_dataset(entries: list[tuple[str, str]]) -> Dataset:
     """Build a dataset from (image_name, action) pairs."""
-    results = [
-        LabelResult(
-            image_path=Path(img),
-            detection=_make_detection(),
-            response=StubResponse(action=action),
+    ds = Dataset()
+    for img, action in entries:
+        ds.add_rows(
+            Path(img),
+            [_make_detection()],
+            [StubResponse(action=action)],
         )
-        for img, action in entries
-    ]
-    return Dataset.from_label_results(results)
+    return ds
 
 
 class TestRemoveClass:

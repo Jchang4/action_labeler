@@ -7,6 +7,13 @@ name = "action_labeler"
 version = "0.1.0"
 description = "AI-powered action labeling in images"
 requires-python = ">=3.10"
+dependencies = [
+    "Pillow",
+    "requests",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/action_labeler"]

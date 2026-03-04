@@ -30,6 +30,14 @@ Every DataFrame must have these columns (enforced by `_validate()`):
 # Returned by ActionLabeler.run()
 dataset = labeler.run(dataset_path)
 
+# Build incrementally
+dataset = Dataset()
+dataset.add_rows(image_path, detections, responses)
+
+# Check for existing rows (useful for resuming)
+if not dataset.has_row(image_path, detection):
+    ...
+
 # Extract a field from all response objects
 actions = dataset.response_field("action")
 
@@ -70,10 +78,10 @@ Add the method to `DatasetFilterMixin` in `filter.py`. It should:
 
 1. Add the constant to `DatasetColumns` in `columns.py`.
 2. If it should always be present, add it to `DatasetColumns.REQUIRED`.
-3. Update `from_label_results()` in `dataset.py` to populate it (including the empty-results branch).
+3. Update `add_rows()` in `dataset.py` to populate it.
 
 ## Tests
 
 Tests live in `tests/dataset/` and mirror the module structure:
-- `test_dataset.py` — construction, validation, save/load, helpers
+- `test_dataset.py` — construction, validation, save/load, helpers, `add_rows`, `has_row`
 - `test_filter.py` — one test class per filter method

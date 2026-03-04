@@ -18,11 +18,12 @@ class BaseModel(ABC):
         ...
 
     @abstractmethod
-    def predict(self, prompt: str, images: list[Image.Image]) -> str:
+    def predict(self, system: str, user: str, images: list[Image.Image]) -> str:
         """Run inference on the given prompt and images.
 
         Args:
-            prompt: The text prompt to send to the model.
+            system: The system prompt.
+            user: The user message.
             images: Pre-processed images (already passed through load_image).
 
         Returns:

@@ -37,18 +37,21 @@ class LlamaCpp(BaseModel):
     def load_image(self, image: Image.Image) -> Image.Image:
         return image.convert("RGB")
 
-    def predict(self, prompt: str, images: list[Image.Image]) -> str:
-        content = []
+    def predict(self, system: str, user: str, images: list[Image.Image]) -> str:
+        user_content = []
         for image in images:
             b64 = self._encode_image(image)
-            content.append({
+            user_content.append({
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
             })
-        content.append({"type": "text", "text": prompt})
+        user_content.append({"type": "text", "text": user})
 
         payload: dict = {
-            "messages": [{"role": "user", "content": content}],
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_content},
+            ],
             "max_tokens": self.max_tokens,
         }
         if self.temperature is not None:

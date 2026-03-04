@@ -5,6 +5,7 @@ from pathlib import Path
 from PIL import Image
 from pydantic import BaseModel
 
+from .dataset import Dataset
 from .filters.base import BaseFilter
 from .models.base import BaseModel as BaseVLM
 from .preprocessors.base import BasePreprocessor
@@ -42,7 +43,7 @@ class ActionLabeler(ABC):
         self.preprocessors = preprocessors or []
         self.filters = filters or []
 
-    def run(self, dataset_path: Path) -> list[LabelResult]:
+    def run(self, dataset_path: Path) -> Dataset:
         """Orchestrate the labeling pipeline over a dataset directory.
 
         For each image:
@@ -51,6 +52,8 @@ class ActionLabeler(ABC):
         3. Delegate to label() (subclass-defined strategy)
         4. Collect results
         5. On error: print image_path + exception, continue
+
+        Returns a Dataset backed by a pandas DataFrame.
         """
         results: list[LabelResult] = []
         image_paths = self._load_images(dataset_path)
@@ -75,7 +78,7 @@ class ActionLabeler(ABC):
             except Exception as e:
                 print(f"{image_path}: {e}")
 
-        return results
+        return Dataset.from_label_results(results)
 
     @abstractmethod
     def label(

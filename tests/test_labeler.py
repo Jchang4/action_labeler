@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 from PIL import Image
 
+from action_labeler.dataset import Dataset
 from action_labeler.labeler import ActionLabeler, LabelResult
 from action_labeler.types import Detection
 
@@ -158,16 +159,17 @@ class TestApplyPreprocessors:
 
 
 class TestRun:
-    def test_collects_results_from_label(self, tmp_path):
+    def test_returns_dataset(self, tmp_path):
         _write_image(tmp_path / "images" / "a.jpg")
         _write_detections(
             tmp_path / "detect" / "a.txt", ["0 0.5 0.5 0.3 0.4"]
         )
 
         labeler = _make_labeler()
-        results = labeler.run(tmp_path)
-        assert len(results) == 1
-        assert results[0].image_path == tmp_path / "images" / "a.jpg"
+        dataset = labeler.run(tmp_path)
+        assert isinstance(dataset, Dataset)
+        assert len(dataset) == 1
+        assert dataset.df["image_path"].iloc[0] == tmp_path / "images" / "a.jpg"
 
     def test_skips_filtered_images(self, tmp_path):
         _write_image(tmp_path / "images" / "a.jpg")
@@ -178,8 +180,8 @@ class TestRun:
         reject_filter = MagicMock()
         reject_filter.filter.return_value = False
         labeler = _make_labeler(filters=[reject_filter])
-        results = labeler.run(tmp_path)
-        assert len(results) == 0
+        dataset = labeler.run(tmp_path)
+        assert len(dataset) == 0
 
     def test_continues_on_error(self, tmp_path, capsys):
         _write_image(tmp_path / "images" / "a.jpg")
@@ -211,10 +213,10 @@ class TestRun:
         labeler = ErrorOnFirstLabeler(
             model=model, prompt=MagicMock()
         )
-        results = labeler.run(tmp_path)
+        dataset = labeler.run(tmp_path)
 
         # Second image still processed
-        assert len(results) == 1
+        assert len(dataset) == 1
         captured = capsys.readouterr()
         assert "bad image" in captured.out
 
@@ -226,7 +228,7 @@ class TestRun:
         )
 
         labeler = _make_labeler()
-        results = labeler.run(tmp_path)
-        assert len(results) == 2
-        for r in results:
-            assert r.image_path == tmp_path / "images" / "photo.jpg"
+        dataset = labeler.run(tmp_path)
+        assert len(dataset) == 2
+        for path in dataset.df["image_path"]:
+            assert path == tmp_path / "images" / "photo.jpg"

@@ -9,6 +9,7 @@ description = "AI-powered action labeling in images"
 requires-python = ">=3.10"
 dependencies = [
     "Pillow",
+    "pandas",
     "pydantic",
     "requests",
 ]

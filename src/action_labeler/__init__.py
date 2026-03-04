@@ -1,3 +1,4 @@
-from .labeler import ActionLabeler
+from .labeler import ActionLabeler, LabelResult
+from .types import Detection
 
-__all__ = ["ActionLabeler"]
+__all__ = ["ActionLabeler", "Detection", "LabelResult"]

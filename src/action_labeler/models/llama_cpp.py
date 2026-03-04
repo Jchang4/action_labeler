@@ -41,10 +41,12 @@ class LlamaCpp(BaseModel):
         user_content = []
         for image in images:
             b64 = self._encode_image(image)
-            user_content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-            })
+            user_content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+                }
+            )
         user_content.append({"type": "text", "text": user})
 
         payload: dict = {

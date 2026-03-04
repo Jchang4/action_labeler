@@ -24,15 +24,35 @@ class Prompt:
         self.response_model = response_model
 
     def format_system(self) -> str:
-        """Return the system prompt, appending JSON schema instructions if response_model is set."""
+        """Return the system prompt, appending JSON format instructions if response_model is set."""
         if self.response_model is None:
             return self.system
 
-        schema = json.dumps(self.response_model.model_json_schema())
+        example = self._build_example(self.response_model)
         return (
             f"{self.system}\n\n"
-            f"Respond with JSON matching this schema:\n{schema}"
+            f"Respond with JSON using exactly this format:\n{example}"
         )
+
+    @staticmethod
+    def _build_example(model: type[BaseModel]) -> str:
+        """Build a JSON example from a Pydantic model's field names and types."""
+        placeholders: dict[str, object] = {}
+        for name, field_info in model.model_fields.items():
+            annotation = field_info.annotation
+            if annotation is str:
+                placeholders[name] = f"<{name}>"
+            elif annotation is int:
+                placeholders[name] = 0
+            elif annotation is float:
+                placeholders[name] = 0.0
+            elif annotation is bool:
+                placeholders[name] = False
+            elif annotation is list:
+                placeholders[name] = []
+            else:
+                placeholders[name] = f"<{name}>"
+        return json.dumps(placeholders, indent=2)
 
     def format_user(self, **kwargs: object) -> str:
         """Render the user template with the given variables."""

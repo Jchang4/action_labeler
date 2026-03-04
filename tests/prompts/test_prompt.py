@@ -14,7 +14,7 @@ class TestFormatSystem:
         prompt = Prompt(system="You are a classifier.", user="classify")
         assert prompt.format_system() == "You are a classifier."
 
-    def test_appends_json_schema_with_response_model(self):
+    def test_appends_example_with_response_model(self):
         prompt = Prompt(
             system="You are a classifier.",
             user="classify",
@@ -22,19 +22,29 @@ class TestFormatSystem:
         )
         result = prompt.format_system()
         assert result.startswith("You are a classifier.\n\n")
-        assert "Respond with JSON matching this schema:" in result
+        assert "Respond with JSON using exactly this format:" in result
         assert '"action"' in result
         assert '"confidence"' in result
 
-    def test_schema_is_valid_json(self):
+    def test_example_is_valid_json(self):
         import json
 
         prompt = Prompt(system="sys", user="usr", response_model=ActionLabel)
         result = prompt.format_system()
-        # Extract the JSON part after the schema instruction line
-        schema_line = result.split("Respond with JSON matching this schema:\n")[1]
-        parsed = json.loads(schema_line)
-        assert "properties" in parsed
+        example_str = result.split("Respond with JSON using exactly this format:\n")[1]
+        parsed = json.loads(example_str)
+        assert "action" in parsed
+        assert "confidence" in parsed
+
+    def test_example_uses_type_placeholders(self):
+        import json
+
+        prompt = Prompt(system="sys", user="usr", response_model=ActionLabel)
+        result = prompt.format_system()
+        example_str = result.split("Respond with JSON using exactly this format:\n")[1]
+        parsed = json.loads(example_str)
+        assert parsed["action"] == "<action>"
+        assert parsed["confidence"] == 0.0
 
 
 class TestFormatUser:

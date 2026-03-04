@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Detection:
     """A single YOLO-format detection with pixel-space properties.
 
@@ -55,10 +55,10 @@ class Detection:
         w, h = image.size
         return cls(
             class_id=int(parts[0]),
-            x_center=float(parts[1]),
-            y_center=float(parts[2]),
-            width=float(parts[3]),
-            height=float(parts[4]),
+            x_center=round(float(parts[1]), 6),
+            y_center=round(float(parts[2]), 6),
+            width=round(float(parts[3]), 6),
+            height=round(float(parts[4]), 6),
             image_width=w,
             image_height=h,
         )

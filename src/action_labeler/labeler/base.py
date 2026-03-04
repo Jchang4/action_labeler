@@ -1,27 +1,17 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
 from pydantic import BaseModel
 
-from .dataset import Dataset
-from .filters.base import BaseFilter
-from .models.base import BaseModel as BaseVLM
-from .preprocessors.base import BasePreprocessor
-from .prompts import Prompt
-from .types import Detection
+from ..dataset import Dataset
+from ..filters.base import BaseFilter
+from ..models.base import BaseModel as BaseVLM
+from ..preprocessors.base import BasePreprocessor
+from ..prompts import Prompt
+from ..types import Detection
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
-
-
-@dataclass
-class LabelResult:
-    """Result of labeling a single detection."""
-
-    image_path: Path
-    detection: Detection
-    response: BaseModel | str
 
 
 class ActionLabeler(ABC):
@@ -29,13 +19,23 @@ class ActionLabeler(ABC):
 
     Subclasses implement label() to define how detections map to model calls.
     The shared run() method handles file loading, filtering, and error handling.
+
+    Args:
+        model: Vision-language model for inference.
+        prompt: Prompt template for system/user messages and response parsing.
+        preprocessors: Image preprocessing chains. Each inner list is a chain
+            of preprocessors that produces one image. Multiple chains produce
+            multiple images sent to the model together.
+            Example: ``[[crop, resize]]`` produces 1 image.
+            Example: ``[[crop], [mask], [bbox]]`` produces 3 images.
+        filters: Filters that can reject entire images from processing.
     """
 
     def __init__(
         self,
         model: BaseVLM,
         prompt: Prompt,
-        preprocessors: list[BasePreprocessor] | None = None,
+        preprocessors: list[list[BasePreprocessor]] | None = None,
         filters: list[BaseFilter] | None = None,
     ):
         self.model = model
@@ -43,19 +43,28 @@ class ActionLabeler(ABC):
         self.preprocessors = preprocessors or []
         self.filters = filters or []
 
-    def run(self, dataset_path: Path) -> Dataset:
+    def run(
+        self, dataset_path: Path, dataset: Dataset | None = None
+    ) -> Dataset:
         """Orchestrate the labeling pipeline over a dataset directory.
 
         For each image:
         1. Load image + detection file
         2. Apply filters — skip image if any filter rejects
-        3. Delegate to label() (subclass-defined strategy)
-        4. Collect results
-        5. On error: print image_path + exception, continue
+        3. Skip detections already in dataset (enables resume)
+        4. Delegate to label() (subclass-defined strategy)
+        5. Add results to dataset incrementally
+        6. On error: print image_path + exception, continue
+
+        Args:
+            dataset_path: Path to the dataset directory.
+            dataset: Optional existing Dataset to resume from. Already-labeled
+                detections are skipped.
 
         Returns a Dataset backed by a pandas DataFrame.
         """
-        results: list[LabelResult] = []
+        if dataset is None:
+            dataset = Dataset()
         image_paths = self._load_images(dataset_path)
 
         for image_path in image_paths:
@@ -71,26 +80,30 @@ class ActionLabeler(ABC):
                 if not self._apply_filters(image, detections):
                     continue
 
-                label_results = self.label(image, detections)
-                for result in label_results:
-                    result.image_path = image_path
-                results.extend(label_results)
+                # Skip fully-labeled images
+                if all(
+                    dataset.has_row(image_path, d) for d in detections
+                ):
+                    continue
+
+                responses = self.label(image, detections)
+                dataset.add_rows(image_path, detections, responses)
             except Exception as e:
                 print(f"{image_path}: {e}")
 
-        return Dataset.from_label_results(results)
+        return dataset
 
     @abstractmethod
     def label(
         self, image: Image.Image, detections: list[Detection]
-    ) -> list[LabelResult]:
+    ) -> list[BaseModel | str]:
         """Subclasses define how detections map to model calls.
 
         Receives the raw image (not yet preprocessed) and all detections
         for that image. Responsible for calling preprocessors, model.predict(),
         and prompt.parse() as needed.
 
-        Returns one LabelResult per detection that was labeled.
+        Returns one response per detection, positionally matched.
         """
         ...
 
@@ -118,8 +131,19 @@ class ActionLabeler(ABC):
 
     def _apply_preprocessors(
         self, image: Image.Image, detections: list[Detection]
-    ) -> Image.Image:
-        """Apply preprocessors in order, return transformed image."""
-        for preprocessor in self.preprocessors:
-            image = preprocessor.process(image, detections)
-        return image
+    ) -> list[Image.Image]:
+        """Apply each preprocessor chain to produce one image per chain.
+
+        Returns a list of images, one per preprocessing chain. If no
+        preprocessors are configured, returns the original image in a list.
+        """
+        if not self.preprocessors:
+            return [image]
+
+        images = []
+        for chain in self.preprocessors:
+            img = image.copy()
+            for preprocessor in chain:
+                img = preprocessor.process(img, detections)
+            images.append(img)
+        return images

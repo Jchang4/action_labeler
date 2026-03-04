@@ -1,117 +1,12 @@
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "action_labeler"
-dynamic = ["version"]
-description = "A Python package for labeling actions in images using AI models"
-readme = "README.md"
-license = {text = "MIT"}
-authors = [
-    {name = "Justin Chang"},
-]
-maintainers = [
-    {name = "Justin Chang"},
-]
-keywords = [
-    "computer-vision",
-    "machine-learning", 
-    "ai",
-    "image-labeling",
-    "yolo",
-    "object-detection",
-    "action-recognition"
-]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Scientific/Engineering :: Image Processing",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Operating System :: OS Independent",
-]
-requires-python = ">=3.9"
-dependencies = [
-    "ultralytics",
-    "supervision",
-    "pillow",
-    "tqdm",
-    "pyyaml",
-    "numpy",
-    "pandas",
-    "matplotlib",
-    "opencv-python",
-]
+version = "0.1.0"
+description = "AI-powered action labeling in images"
+requires-python = ">=3.10"
 
-[project.optional-dependencies]
-dev = [
-    "jupyter",
-    "notebook",
-    "ipykernel",
-    "opencv-stubs",
-]
-ai = [
-    "openai",
-    "transformers",
-    "torch",
-    "torchvision",
-]
-test = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-mock>=3.10.0",
-    "pytest-xdist>=3.0.0",
-]
-
-[project.urls]
-Homepage = "https://github.com/Jchang4/action_labeler"
-Documentation = "https://github.com/Jchang4/action_labeler#readme"
-Repository = "https://github.com/Jchang4/action_labeler"
-"Bug Reports" = "https://github.com/Jchang4/action_labeler/issues"
-
-[tool.setuptools]
-packages = ["action_labeler"]
-
-[tool.setuptools.dynamic]
-version = {attr = "action_labeler.__version__.__version__"}
-
-[tool.setuptools.package-data]
-action_labeler = ["py.typed"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py", "*_test.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = [
-    "--cov=action_labeler",
-    "--cov-report=html",
-    "--cov-report=term-missing",
-    "--cov-report=xml",
-    "--strict-markers",
-    "--strict-config",
-]
-
-[tool.coverage.run]
-source = ["action_labeler"]
-omit = [
-    "*/tests/*",
-    "*/test_*",
-    "*/__pycache__/*",
-    "*/.*",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-]
+[tool.hatch.build.targets.wheel]
+packages = ["src/action_labeler"]

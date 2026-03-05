@@ -23,15 +23,25 @@ class LlamaCpp(BaseModel):
         self,
         base_url: str = "http://localhost:5000",
         *,
-        temperature: float | None = None,
-        top_p: float | None = None,
-        top_k: int | None = None,
-        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        top_p: float = 0.8,
+        top_k: int = 20,
+        min_p: float = 0.0,
+        presence_penalty: float = 1.5,
+        frequency_penalty: float = 0.0,
+        repeat_penalty: float = 1.0,
+        seed: int = -1,
+        max_tokens: int = 32768,
     ):
         self.base_url = base_url.rstrip("/")
         self.temperature = temperature
         self.top_p = top_p
         self.top_k = top_k
+        self.min_p = min_p
+        self.presence_penalty = presence_penalty
+        self.frequency_penalty = frequency_penalty
+        self.repeat_penalty = repeat_penalty
+        self.seed = seed
         self.max_tokens = max_tokens
 
     def load_image(self, image: Image.Image) -> Image.Image:
@@ -55,20 +65,26 @@ class LlamaCpp(BaseModel):
                 {"role": "user", "content": user_content},
             ],
             "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "top_k": self.top_k,
+            "min_p": self.min_p,
+            "presence_penalty": self.presence_penalty,
+            "frequency_penalty": self.frequency_penalty,
+            "repeat_penalty": self.repeat_penalty,
+            "seed": self.seed,
         }
-        if self.temperature is not None:
-            payload["temperature"] = self.temperature
-        if self.top_p is not None:
-            payload["top_p"] = self.top_p
-        if self.top_k is not None:
-            payload["top_k"] = self.top_k
 
         response = requests.post(
             f"{self.base_url}/v1/chat/completions",
             json=payload,
         )
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        if not content:
+            raise ValueError(f"Model returned empty response: {data}")
+        return content
 
     @staticmethod
     def _encode_image(image: Image.Image) -> str:

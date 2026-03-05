@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from pydantic import BaseModel, ValidationError
 
@@ -27,8 +29,6 @@ class TestFormatSystem:
         assert '"confidence"' in result
 
     def test_example_is_valid_json(self):
-        import json
-
         prompt = Prompt(system="sys", user="usr", response_model=ActionLabel)
         result = prompt.format_system()
         example_str = result.split("Respond with JSON using exactly this format:\n")[1]
@@ -37,8 +37,6 @@ class TestFormatSystem:
         assert "confidence" in parsed
 
     def test_example_uses_type_placeholders(self):
-        import json
-
         prompt = Prompt(system="sys", user="usr", response_model=ActionLabel)
         result = prompt.format_system()
         example_str = result.split("Respond with JSON using exactly this format:\n")[1]
@@ -105,3 +103,51 @@ class TestParse:
         prompt = Prompt(system="sys", user="usr", response_model=ActionLabel)
         with pytest.raises(ValidationError):
             prompt.parse('{"wrong_field": "value"}')
+
+
+class TestListResponseModel:
+    """Tests for list[BaseModel] as response_model."""
+
+    def test_format_system_generates_array_example(self):
+        prompt = Prompt(system="Classify.", user="usr", response_model=list[ActionLabel])
+        result = prompt.format_system()
+        assert "Respond with JSON using exactly this format:" in result
+        example_str = result.split("Respond with JSON using exactly this format:\n")[1]
+        parsed = json.loads(example_str)
+        assert isinstance(parsed, list)
+        assert len(parsed) == 1
+        assert "action" in parsed[0]
+        assert "confidence" in parsed[0]
+
+    def test_parse_json_array(self):
+        prompt = Prompt(system="sys", user="usr", response_model=list[ActionLabel])
+        text = '[{"action": "sitting", "confidence": 0.9}, {"action": "standing", "confidence": 0.8}]'
+        result = prompt.parse(text)
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0].action == "sitting"
+        assert result[1].action == "standing"
+
+    def test_parse_array_from_markdown_code_block(self):
+        prompt = Prompt(system="sys", user="usr", response_model=list[ActionLabel])
+        text = '```json\n[{"action": "running", "confidence": 0.7}]\n```'
+        result = prompt.parse(text)
+        assert isinstance(result, list)
+        assert result[0].action == "running"
+
+    def test_parse_array_from_surrounding_text(self):
+        prompt = Prompt(system="sys", user="usr", response_model=list[ActionLabel])
+        text = 'Here: [{"action": "walking", "confidence": 0.6}] done.'
+        result = prompt.parse(text)
+        assert isinstance(result, list)
+        assert result[0].action == "walking"
+
+    def test_parse_raises_on_invalid_items(self):
+        prompt = Prompt(system="sys", user="usr", response_model=list[ActionLabel])
+        with pytest.raises(ValidationError):
+            prompt.parse('[{"wrong": "schema"}]')
+
+    def test_parse_empty_array(self):
+        prompt = Prompt(system="sys", user="usr", response_model=list[ActionLabel])
+        result = prompt.parse("[]")
+        assert result == []

@@ -101,20 +101,40 @@ class TestPredict:
         model = LlamaCpp()
         model.predict("system", "prompt", [_make_image()])
         payload = mock_post.call_args[1]["json"]
-        assert payload["max_tokens"] == 1024
-        assert "temperature" not in payload
-        assert "top_p" not in payload
-        assert "top_k" not in payload
+        assert payload["max_tokens"] == 32768
+        assert payload["temperature"] == 0.7
+        assert payload["top_p"] == 0.8
+        assert payload["top_k"] == 20
+        assert payload["min_p"] == 0.0
+        assert payload["presence_penalty"] == 1.5
+        assert payload["frequency_penalty"] == 0.0
+        assert payload["repeat_penalty"] == 1.0
+        assert payload["seed"] == -1
 
     @patch("action_labeler.models.llama_cpp.requests.post")
     def test_custom_sampling_params(self, mock_post):
         mock_post.return_value = _mock_response()
-        model = LlamaCpp(temperature=0.5, top_p=0.9, top_k=40, max_tokens=512)
+        model = LlamaCpp(
+            temperature=0.5,
+            top_p=0.9,
+            top_k=40,
+            min_p=0.05,
+            presence_penalty=0.0,
+            frequency_penalty=0.5,
+            repeat_penalty=1.1,
+            seed=42,
+            max_tokens=512,
+        )
         model.predict("system", "prompt", [_make_image()])
         payload = mock_post.call_args[1]["json"]
         assert payload["temperature"] == 0.5
         assert payload["top_p"] == 0.9
         assert payload["top_k"] == 40
+        assert payload["min_p"] == 0.05
+        assert payload["presence_penalty"] == 0.0
+        assert payload["frequency_penalty"] == 0.5
+        assert payload["repeat_penalty"] == 1.1
+        assert payload["seed"] == 42
         assert payload["max_tokens"] == 512
 
     @patch("action_labeler.models.llama_cpp.requests.post")

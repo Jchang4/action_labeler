@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+## Important
+
+Do not use `yolo/action_labeler` as a reference. We are creating a new package for a reason.
+
 ## Project Overview
 
 ActionLabeler is an autodistillation framework that uses VLMs to label the actions of people in images.
@@ -21,28 +25,67 @@ dataset_folder/
 
 Examples: `../datasets/human/sitting/`
 
+## Architecture
+
+```
+src/action_labeler/
+  types.py              # Detection dataclass (YOLO-format with pixel-space properties)
+  models/               # VLM integrations (base interface + llama.cpp)
+  preprocessors/        # Image transforms before VLM inference (bounding_box, resize)
+  filters/              # Reject detections/images (aspect_ratio, detection_count, overlap)
+  prompts/              # Prompt template with system/user messages and response parsing
+  labeler/              # Orchestration layer (abstract base + 3 strategies)
+    base.py             # ActionLabeler — shared run() loop, filtering, resume
+    all_at_once.py      # One VLM call per image, all detections at once
+    single_detection.py # One VLM call per detection
+    multi_view.py       # One VLM call per detection, multiple preprocessed views
+  dataset/              # Output container (pandas DataFrame wrapper)
+    columns.py          # Column name constants (single source of truth)
+    dataset.py          # Dataset class — construction, save/load, add_rows, has_row
+    filter.py           # DatasetFilterMixin — in-place row filtering
+    plot.py             # DatasetPlotMixin — stub, not yet implemented
+```
+
 ## Core Components
 
-- **Model**: VLM integration (e.g. llama.cpp models)
-- **Preprocessors**: Augment images before VLM inference (crop, add bounding boxes, add labels, etc.)
-- **Filters**: Remove individual detections or entire images from processing (e.g. bounding box too small)
-- **Prompt**: Instructions sent to the VLM for action classification
-- **ResponseParser**: Parses VLM output (handles JSON extraction, triple backticks, extra text) and optionally types into Python dataclasses
+- **Detection** (`types.py`): Dataclass for a single YOLO-format detection with normalized coordinates and pixel-space properties (x1, y1, x2, y2, xyxy)
+- **Model** (`models/`): VLM integration — `predict(system, user, images)` returns raw text. Currently: `LlamaCppModel`
+- **Preprocessors** (`preprocessors/`): Transform images before VLM inference. Configured as chains: `list[list[BasePreprocessor]]` where each inner list produces one image
+- **Filters** (`filters/`): Accept/reject an image and its detections. Return `True` to keep, `False` to skip
+- **Prompt** (`prompts/`): Template with `format_system()`, `format_user()`, and `parse(text)` for response parsing (supports Pydantic response models)
+- **ActionLabeler** (`labeler/`): Abstract base with shared `run()` loop. Subclasses implement `label()` to define how detections map to VLM calls
+- **Dataset** (`dataset/`): Output container wrapping a pandas DataFrame. One row per (image, detection) pair. Supports save/load (pickle), filtering, and resume
 
 ## Usage Pattern
 
 ```python
-ActionLabeler(
-    model=SomeLlamaCppModel,
-    prompt=SomePrompt,
-    preprocessors=[...],
-    filters=[...],
-    response_parser=SomeResponseParser(),
+labeler = SingleDetectionLabeler(
+    model=LlamaCppModel(...),
+    prompt=Prompt(system="...", user="...", response_model=MyAction),
+    preprocessors=[[crop, resize]],
+    filters=[AspectRatioFilter(min_ratio=0.3)],
 )
+
+dataset = labeler.run(dataset_path)
+dataset.save(Path("results.pkl"))
+
+# Resume from checkpoint
+dataset = Dataset.load(Path("results.pkl"))
+dataset = labeler.run(dataset_path, dataset=dataset)
 ```
 
 ## Commands
 
 ```bash
-uv pip install -e . --python /home/justin/machine_learning/yolo/.venv/bin/python
+uv pip install -e ".[dev]" --python /home/justin/machine_learning/yolo/.venv/bin/python
+```
+
+## Testing
+
+Tests use **pytest** and live in `tests/`, mirroring the `src/action_labeler/` structure.
+
+```bash
+pytest tests/           # Run all tests
+pytest tests/models/    # Run tests for a specific module
+pytest -v -k "test_name"  # Run a specific test
 ```

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pickle
 from pathlib import Path
 
 import pandas as pd
@@ -71,15 +70,12 @@ class Dataset(DatasetPlotMixin, DatasetFilterMixin):
 
     def save(self, path: Path) -> None:
         """Pickle the DataFrame to disk."""
-        with open(path, "wb") as f:
-            pickle.dump(self.df, f)
+        self.df.to_pickle(path)
 
     @classmethod
     def load(cls, path: Path) -> Dataset:
         """Load from pickled DataFrame. Runs _validate on load."""
-        with open(path, "rb") as f:
-            df = pickle.load(f)  # noqa: S301
-        return cls(df)
+        return cls(pd.read_pickle(path))
 
     def response_field(self, field_name: str) -> pd.Series:
         """Extract a field from all response objects as a Series."""

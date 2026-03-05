@@ -4,6 +4,28 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
+from pydantic import BaseModel
+
+
+class ActionResponse(BaseModel):
+    """Base response model for action labeling.
+
+    All prompt response models should inherit from this to ensure
+    the ``action`` field is always present.
+    """
+
+    action: str
+
+
+@dataclass
+class LabelResult:
+    """Standardized output from a labeler's label() method.
+
+    Pairs the extracted action string with the full VLM response.
+    """
+
+    action: str
+    response: ActionResponse | str
 
 
 @dataclass(unsafe_hash=True)

@@ -4,9 +4,8 @@ import pickle
 from pathlib import Path
 
 import pandas as pd
-from pydantic import BaseModel
 
-from ..types import Detection
+from ..types import Detection, LabelResult
 from .columns import DatasetColumns
 from .filter import DatasetFilterMixin
 from .plot import DatasetPlotMixin
@@ -30,11 +29,11 @@ class Dataset(DatasetPlotMixin, DatasetFilterMixin):
         self,
         image_path: Path,
         detections: list[Detection],
-        responses: list[BaseModel | str],
+        results: list[LabelResult],
     ) -> None:
         """Append rows for all detections in an image.
 
-        Deduplicates by (image_path, detection) keeping the latest response.
+        Deduplicates by (image_path, detection) keeping the latest result.
         Detection indices are recomputed per image after dedup.
         """
         rows = pd.DataFrame(
@@ -43,9 +42,10 @@ class Dataset(DatasetPlotMixin, DatasetFilterMixin):
                     DatasetColumns.IMAGE_PATH: image_path,
                     DatasetColumns.DETECTION_INDEX: 0,  # recomputed below
                     DatasetColumns.DETECTION: det,
-                    DatasetColumns.RESPONSE: resp,
+                    DatasetColumns.ACTION: result.action,
+                    DatasetColumns.RESPONSE: result.response,
                 }
-                for det, resp in zip(detections, responses)
+                for det, result in zip(detections, results)
             ]
         )
         self.df = pd.concat([self.df, rows], ignore_index=True)

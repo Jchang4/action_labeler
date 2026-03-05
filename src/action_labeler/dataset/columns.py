@@ -4,6 +4,7 @@ class DatasetColumns:
     IMAGE_PATH = "image_path"
     DETECTION_INDEX = "detection_index"
     DETECTION = "detection"
+    ACTION = "action"
     RESPONSE = "response"
 
-    REQUIRED = {IMAGE_PATH, DETECTION_INDEX, DETECTION, RESPONSE}
+    REQUIRED = {IMAGE_PATH, DETECTION_INDEX, DETECTION, ACTION, RESPONSE}

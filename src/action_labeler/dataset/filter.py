@@ -16,19 +16,15 @@ class DatasetFilterMixin:
 
     df: pd.DataFrame
 
-    def remove_class(self, class_name: str, field: str = "action") -> None:
-        """Remove rows where response.{field} == class_name."""
-        col = DatasetColumns.RESPONSE
-        mask = self.df[col].apply(lambda r: getattr(r, field, None) != class_name)
-        self.df = self.df[mask].reset_index(drop=True)
+    def remove_class(self, class_name: str) -> None:
+        """Remove rows where action == class_name."""
+        col = DatasetColumns.ACTION
+        self.df = self.df[self.df[col] != class_name].reset_index(drop=True)
 
-    def keep_classes(self, class_names: list[str], field: str = "action") -> None:
-        """Keep only rows where response.{field} is in class_names."""
-        col = DatasetColumns.RESPONSE
-        mask = self.df[col].apply(
-            lambda r: getattr(r, field, None) in class_names
-        )
-        self.df = self.df[mask].reset_index(drop=True)
+    def keep_classes(self, class_names: list[str]) -> None:
+        """Keep only rows where action is in class_names."""
+        col = DatasetColumns.ACTION
+        self.df = self.df[self.df[col].isin(class_names)].reset_index(drop=True)
 
     def remove_image(self, image_path: Path) -> None:
         """Remove all rows for a given image path."""

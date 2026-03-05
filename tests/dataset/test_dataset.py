@@ -198,6 +198,44 @@ class TestResponseField:
         assert list(actions) == ["walking", "sitting"]
 
 
+class TestCombine:
+    def test_combines_two_datasets(self):
+        ds1 = Dataset()
+        ds1.add_rows(Path("a.jpg"), [_make_detection()], [_result("walking")])
+        ds2 = Dataset()
+        ds2.add_rows(Path("b.jpg"), [_make_detection()], [_result("sitting")])
+        combined = Dataset.combine(ds1, ds2)
+        assert len(combined) == 2
+
+    def test_no_args_returns_empty(self):
+        combined = Dataset.combine()
+        assert len(combined) == 0
+
+    def test_single_dataset(self):
+        ds = Dataset()
+        ds.add_rows(Path("a.jpg"), [_make_detection()], [_result("walking")])
+        combined = Dataset.combine(ds)
+        assert len(combined) == 1
+
+    def test_preserves_all_rows_no_dedup(self):
+        ds1 = Dataset()
+        det = _make_detection()
+        ds1.add_rows(Path("a.jpg"), [det], [_result("walking")])
+        ds2 = Dataset()
+        ds2.add_rows(Path("a.jpg"), [det], [_result("sitting")])
+        combined = Dataset.combine(ds1, ds2)
+        assert len(combined) == 2
+
+    def test_does_not_mutate_originals(self):
+        ds1 = Dataset()
+        ds1.add_rows(Path("a.jpg"), [_make_detection()], [_result("walking")])
+        ds2 = Dataset()
+        ds2.add_rows(Path("b.jpg"), [_make_detection()], [_result("sitting")])
+        Dataset.combine(ds1, ds2)
+        assert len(ds1) == 1
+        assert len(ds2) == 1
+
+
 class TestLen:
     def test_returns_row_count(self):
         ds = Dataset()

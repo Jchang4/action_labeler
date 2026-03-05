@@ -6,11 +6,12 @@ import pandas as pd
 
 from ..types import Detection, LabelResult
 from .columns import DatasetColumns
+from .export import DatasetExportMixin
 from .filter import DatasetFilterMixin
 from .plot import DatasetPlotMixin
 
 
-class Dataset(DatasetPlotMixin, DatasetFilterMixin):
+class Dataset(DatasetExportMixin, DatasetPlotMixin, DatasetFilterMixin):
     def __init__(self, df: pd.DataFrame | None = None):
         if df is None:
             df = pd.DataFrame(columns=[c for c in DatasetColumns.REQUIRED])
@@ -71,6 +72,14 @@ class Dataset(DatasetPlotMixin, DatasetFilterMixin):
     def save(self, path: Path) -> None:
         """Pickle the DataFrame to disk."""
         self.df.to_pickle(path)
+
+    @classmethod
+    def combine(cls, *datasets: Dataset) -> Dataset:
+        """Concatenate multiple datasets into one. No dedup, no new columns."""
+        if not datasets:
+            return cls()
+        dfs = [ds.df.copy() for ds in datasets]
+        return cls(pd.concat(dfs, ignore_index=True))
 
     @classmethod
     def load(cls, path: Path) -> Dataset:

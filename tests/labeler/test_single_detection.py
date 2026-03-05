@@ -1,10 +1,9 @@
 from unittest.mock import MagicMock, call, patch
 
 from PIL import Image
-from pydantic import BaseModel
-
 from action_labeler.labeler.single_detection import SingleDetectionLabeler
-from action_labeler.types import Detection
+from action_labeler.types import LabelResult
+from action_labeler.types import ActionResponse, Detection
 
 
 def _make_detection(**kwargs):
@@ -25,8 +24,8 @@ def _make_image():
     return Image.new("RGB", (64, 64), color="red")
 
 
-class ActionItem(BaseModel):
-    label: str
+class ActionItem(ActionResponse):
+    pass
 
 
 class TestSingleDetectionLabeler:
@@ -40,7 +39,7 @@ class TestSingleDetectionLabeler:
         prompt = MagicMock()
         prompt.format_system.return_value = "system msg"
         prompt.format_user.return_value = "user msg"
-        prompt.parse.return_value = "parsed"
+        prompt.parse.return_value = ActionItem(action="parsed")
 
         labeler = SingleDetectionLabeler(
             model=model,
@@ -79,16 +78,16 @@ class TestSingleDetectionLabeler:
             mock_pp.assert_any_call(image, [d2])
 
     def test_responses_collected_in_order(self):
-        """Parsed responses are returned in detection order."""
+        """Parsed responses are returned in detection order as LabelResults."""
         detections = [_make_detection(), _make_detection(), _make_detection()]
         labeler, model, prompt = self._build_labeler(
             predict_side_effect=["text_a", "text_b", "text_c"]
         )
         prompt = labeler.prompt
         items = [
-            ActionItem(label="walk"),
-            ActionItem(label="sit"),
-            ActionItem(label="run"),
+            ActionItem(action="walk"),
+            ActionItem(action="sit"),
+            ActionItem(action="run"),
         ]
         prompt.parse.side_effect = items
         image = _make_image()
@@ -98,8 +97,10 @@ class TestSingleDetectionLabeler:
         ):
             result = labeler.label(image, detections)
 
-        assert result == items
         assert len(result) == 3
+        assert all(isinstance(r, LabelResult) for r in result)
+        assert [r.action for r in result] == ["walk", "sit", "run"]
+        assert [r.response for r in result] == items
 
     def test_prompt_format_and_parse_called(self):
         """format_system/format_user called once; parse called per detection."""
@@ -151,7 +152,6 @@ class TestSingleDetectionLabeler:
         labeler.label(image, [d1, d2])
 
         assert preprocessor.process.call_count == 2
-        # Each call gets a single-element detection list
         for c in preprocessor.process.call_args_list:
             det_arg = c[0][1]
             assert len(det_arg) == 1
@@ -165,3 +165,19 @@ class TestSingleDetectionLabeler:
 
         assert result == []
         model.predict.assert_not_called()
+
+    def test_returns_label_results(self):
+        """label() returns LabelResult instances with correct action and response."""
+        detections = [_make_detection()]
+        labeler, model, prompt = self._build_labeler()
+        image = _make_image()
+
+        with patch.object(
+            labeler, "_apply_preprocessors", return_value=[image]
+        ):
+            result = labeler.label(image, detections)
+
+        assert len(result) == 1
+        assert isinstance(result[0], LabelResult)
+        assert result[0].action == "parsed"
+        assert isinstance(result[0].response, ActionItem)

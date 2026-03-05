@@ -1,12 +1,11 @@
 from PIL import Image
-from pydantic import BaseModel
 
 from .base import ActionLabeler
 from ..filters.base import BaseFilter
 from ..models.base import BaseModel as BaseVLM
 from ..preprocessors.base import BasePreprocessor
 from ..prompts import Prompt
-from ..types import Detection
+from ..types import Detection, LabelResult
 
 
 class MultiViewLabeler(ActionLabeler):
@@ -35,17 +34,17 @@ class MultiViewLabeler(ActionLabeler):
                 f"got {len(preprocessors)}"
             )
         super().__init__(
-            model=model, prompt=prompt, preprocessors=preprocessors, filters=filters
+            model=model, prompt=prompt, preprocessors=preprocessors, filters=filters,
         )
 
     def label(
         self, image: Image.Image, detections: list[Detection]
-    ) -> list[BaseModel | str]:
-        responses = []
+    ) -> list[LabelResult]:
+        results = []
         system = self.prompt.format_system()
         user = self.prompt.format_user()
         for det in detections:
             images = self._apply_preprocessors(image, [det])
             text = self.model.predict(system, user, images)
-            responses.append(self.prompt.parse(text))
-        return responses
+            results.append(self._make_result(self.prompt.parse(text)))
+        return results

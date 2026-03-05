@@ -4,6 +4,7 @@ import pytest
 from PIL import Image
 
 from action_labeler.labeler.multi_view import MultiViewLabeler
+from action_labeler.types import LabelResult
 from action_labeler.types import Detection
 
 
@@ -116,9 +117,10 @@ class TestMultiViewLabelerLabel:
         image = Image.new("RGB", (64, 64), color="red")
         detections = [_make_detection(), _make_detection(), _make_detection()]
 
-        responses = labeler.label(image, detections)
+        results = labeler.label(image, detections)
 
-        assert responses == ["first", "second", "third"]
+        assert all(isinstance(r, LabelResult) for r in results)
+        assert [r.action for r in results] == ["first", "second", "third"]
 
     def test_two_detections_three_chains(self):
         model = _make_model_mock()
@@ -135,16 +137,17 @@ class TestMultiViewLabelerLabel:
         image = Image.new("RGB", (64, 64), color="red")
         detections = [_make_detection(), _make_detection()]
 
-        responses = labeler.label(image, detections)
+        results = labeler.label(image, detections)
 
         # 2 predict calls (one per detection)
         assert model.predict.call_count == 2
         # Each call receives 3 images (one per chain)
-        for call in model.predict.call_args_list:
-            images_arg = call[0][2]
+        for c in model.predict.call_args_list:
+            images_arg = c[0][2]
             assert len(images_arg) == 3
-        # 2 responses returned
-        assert len(responses) == 2
+        # 2 results returned
+        assert len(results) == 2
+        assert all(isinstance(r, LabelResult) for r in results)
 
     def test_prompt_format_called(self):
         prompt = _make_prompt_mock()

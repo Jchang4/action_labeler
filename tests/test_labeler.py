@@ -5,6 +5,7 @@ from PIL import Image
 
 from action_labeler.dataset import Dataset
 from action_labeler.labeler import ActionLabeler
+from action_labeler.types import LabelResult
 from action_labeler.types import Detection
 
 
@@ -29,7 +30,7 @@ class StubLabeler(ActionLabeler):
     """Concrete subclass for testing the base class logic."""
 
     def label(self, image, detections):
-        return ["stub" for d in detections]
+        return [LabelResult(action="stub", response="stub") for d in detections]
 
 
 def _make_labeler(**kwargs):
@@ -228,7 +229,7 @@ class TestRun:
                 call_count += 1
                 if call_count == 1:
                     raise ValueError("bad image")
-                return ["ok" for d in detections]
+                return [LabelResult(action="ok", response="ok") for d in detections]
 
         model = MagicMock()
         model.load_image.side_effect = lambda img: img
@@ -255,7 +256,7 @@ class TestRun:
         class TrackingLabeler(ActionLabeler):
             def label(self, image, detections):
                 label_calls.append(detections)
-                return ["resp" for d in detections]
+                return [LabelResult(action="resp", response="resp") for d in detections]
 
         model = MagicMock()
         model.load_image.side_effect = lambda img: img
@@ -266,9 +267,9 @@ class TestRun:
         assert len(dataset) == 2
         original_df = dataset.df.copy()
 
-        # Resume with the fully-labeled dataset — label() should not be called
+        # Resume — label() should not be called again
         label_calls.clear()
-        dataset = labeler.run(tmp_path, dataset=dataset)
+        dataset = labeler.run(tmp_path)
         assert len(label_calls) == 0
         # Dataset unchanged — same rows, same values
         assert len(dataset) == 2
@@ -294,7 +295,7 @@ class TestRun:
         class TrackingLabeler(ActionLabeler):
             def label(self, image, detections):
                 label_calls.append(detections)
-                return ["new_resp" for d in detections]
+                return [LabelResult(action="new_resp", response="new_resp") for d in detections]
 
         model = MagicMock()
         model.load_image.side_effect = lambda img: img
@@ -305,11 +306,11 @@ class TestRun:
         assert len(dataset) == 2
 
         # Keep only first detection, simulating a partial run
-        dataset.df = dataset.df.iloc[:1].reset_index(drop=True)
+        labeler.dataset.df = labeler.dataset.df.iloc[:1].reset_index(drop=True)
         label_calls.clear()
 
         # Resume — label() receives ALL detections, not just the missing one
-        dataset = labeler.run(tmp_path, dataset=dataset)
+        dataset = labeler.run(tmp_path)
 
         assert len(label_calls) == 1
         assert len(label_calls[0]) == 2
@@ -321,6 +322,91 @@ class TestRun:
         assert dataset.df["detection"].iloc[1].class_id == 1
         assert list(dataset.df["response"]) == ["new_resp", "new_resp"]
         assert list(dataset.df["detection_index"]) == [0, 1]
+
+    def test_save_every_saves_periodically(self, tmp_path):
+        """Dataset is saved every N newly-labeled images."""
+        for name in ("a", "b", "c"):
+            _write_image(tmp_path / "images" / f"{name}.jpg")
+            _write_detections(
+                tmp_path / "detect" / f"{name}.txt", ["0 0.5 0.5 0.3 0.4"]
+            )
+
+        save_path = tmp_path / "checkpoint.pkl"
+        labeler = _make_labeler(save_every=2, save_path=save_path)
+        labeler.run(tmp_path)
+
+        # Should have saved: once at 2 images, and once at the end
+        saved = Dataset.load(save_path)
+        assert len(saved) == 3
+
+    def test_save_every_without_save_path_raises(self):
+        """save_every requires save_path."""
+        import pytest
+        with pytest.raises(ValueError, match="save_path is required"):
+            _make_labeler(save_every=5)
+
+    def test_final_save_on_completion(self, tmp_path):
+        """Dataset is saved at the end of run() when save_path is set."""
+        _write_image(tmp_path / "images" / "a.jpg")
+        _write_detections(
+            tmp_path / "detect" / "a.txt", ["0 0.5 0.5 0.3 0.4"]
+        )
+
+        save_path = tmp_path / "checkpoint.pkl"
+        labeler = _make_labeler(save_path=save_path)
+        labeler.run(tmp_path)
+
+        saved = Dataset.load(save_path)
+        assert len(saved) == 1
+
+    def test_loads_existing_dataset_on_init(self, tmp_path):
+        """When save_path points to an existing file, dataset is loaded on init."""
+        _write_image(tmp_path / "images" / "a.jpg")
+        _write_detections(
+            tmp_path / "detect" / "a.txt", ["0 0.5 0.5 0.3 0.4"]
+        )
+
+        save_path = tmp_path / "checkpoint.pkl"
+
+        # First labeler runs and saves
+        labeler1 = _make_labeler(save_path=save_path)
+        labeler1.run(tmp_path)
+        assert len(labeler1.dataset) == 1
+
+        # Second labeler loads existing checkpoint on init
+        labeler2 = _make_labeler(save_path=save_path)
+        assert len(labeler2.dataset) == 1
+
+    def test_resumes_from_loaded_dataset(self, tmp_path):
+        """A new labeler with save_path skips already-labeled images."""
+        _write_image(tmp_path / "images" / "a.jpg")
+        _write_detections(
+            tmp_path / "detect" / "a.txt", ["0 0.5 0.5 0.3 0.4"]
+        )
+
+        save_path = tmp_path / "checkpoint.pkl"
+
+        # First labeler runs and saves
+        labeler1 = _make_labeler(save_path=save_path)
+        labeler1.run(tmp_path)
+
+        # Second labeler loads checkpoint, then runs — should skip the image
+        label_calls = []
+
+        class TrackingLabeler(ActionLabeler):
+            def label(self, image, detections):
+                label_calls.append(detections)
+                return [LabelResult(action="x", response="x") for d in detections]
+
+        model = MagicMock()
+        model.load_image.side_effect = lambda img: img
+        labeler2 = TrackingLabeler(
+            model=model, prompt=MagicMock(), save_path=save_path
+        )
+        dataset = labeler2.run(tmp_path)
+
+        assert len(label_calls) == 0
+        assert len(dataset) == 1
 
     def test_sets_image_path_on_results(self, tmp_path):
         _write_image(tmp_path / "images" / "photo.jpg")

@@ -1,10 +1,9 @@
 from unittest.mock import MagicMock, patch
 
 from PIL import Image
-from pydantic import BaseModel
-
 from action_labeler.labeler.all_at_once import AllAtOnceLabeler
-from action_labeler.types import Detection
+from action_labeler.types import LabelResult
+from action_labeler.types import ActionResponse, Detection
 
 
 def _make_detection(**kwargs):
@@ -25,16 +24,12 @@ def _make_image():
     return Image.new("RGB", (64, 64), color="red")
 
 
-class ActionItem(BaseModel):
-    label: str
-
-
-class BatchResponse(BaseModel):
-    actions: list[ActionItem]
+class ActionItem(ActionResponse):
+    pass
 
 
 class TestAllAtOnceLabeler:
-    def _build_labeler(self, *, parsed_response, response_field="actions"):
+    def _build_labeler(self, *, parsed_response):
         model = MagicMock()
         model.predict.return_value = "raw model text"
 
@@ -46,16 +41,13 @@ class TestAllAtOnceLabeler:
         labeler = AllAtOnceLabeler(
             model=model,
             prompt=prompt,
-            response_field=response_field,
         )
         return labeler, model, prompt
 
     def test_calls_apply_preprocessors(self):
         """label() delegates to _apply_preprocessors with image and all detections."""
         detections = [_make_detection(), _make_detection(x_center=0.2)]
-        parsed = BatchResponse(
-            actions=[ActionItem(label="walk"), ActionItem(label="sit")]
-        )
+        parsed = [ActionItem(action="walk"), ActionItem(action="sit")]
         labeler, model, prompt = self._build_labeler(parsed_response=parsed)
         image = _make_image()
 
@@ -68,9 +60,7 @@ class TestAllAtOnceLabeler:
     def test_model_predict_called_once_with_preprocessed_images(self):
         """model.predict is called exactly once with all preprocessed images."""
         detections = [_make_detection(), _make_detection()]
-        parsed = BatchResponse(
-            actions=[ActionItem(label="a"), ActionItem(label="b")]
-        )
+        parsed = [ActionItem(action="a"), ActionItem(action="b")]
         labeler, model, prompt = self._build_labeler(parsed_response=parsed)
         image = _make_image()
 
@@ -82,16 +72,15 @@ class TestAllAtOnceLabeler:
 
         model.predict.assert_called_once_with("system msg", "user msg", preprocessed)
 
-    def test_extracts_per_detection_items_via_response_field(self):
-        """Parsed response items are extracted from the response_field attribute."""
+    def test_list_response_wraps_each_item(self):
+        """When prompt.parse returns a list, each item is wrapped in LabelResult."""
         detections = [_make_detection(), _make_detection(), _make_detection()]
         items = [
-            ActionItem(label="walk"),
-            ActionItem(label="sit"),
-            ActionItem(label="run"),
+            ActionItem(action="walk"),
+            ActionItem(action="sit"),
+            ActionItem(action="run"),
         ]
-        parsed = BatchResponse(actions=items)
-        labeler, model, prompt = self._build_labeler(parsed_response=parsed)
+        labeler, model, prompt = self._build_labeler(parsed_response=items)
         image = _make_image()
 
         with patch.object(
@@ -99,29 +88,10 @@ class TestAllAtOnceLabeler:
         ):
             result = labeler.label(image, detections)
 
-        assert result == items
         assert len(result) == len(detections)
-
-    def test_custom_response_field(self):
-        """A custom response_field name is used to extract items."""
-
-        class CustomResponse(BaseModel):
-            results: list[ActionItem]
-
-        detections = [_make_detection()]
-        items = [ActionItem(label="jump")]
-        parsed = CustomResponse(results=items)
-        labeler, model, prompt = self._build_labeler(
-            parsed_response=parsed, response_field="results"
-        )
-        image = _make_image()
-
-        with patch.object(
-            labeler, "_apply_preprocessors", return_value=[image]
-        ):
-            result = labeler.label(image, detections)
-
-        assert result == items
+        assert all(isinstance(r, LabelResult) for r in result)
+        assert [r.action for r in result] == ["walk", "sit", "run"]
+        assert [r.response for r in result] == items
 
     def test_raw_string_fallback(self):
         """When prompt.parse returns a str, it is replicated for each detection."""
@@ -136,13 +106,14 @@ class TestAllAtOnceLabeler:
         ):
             result = labeler.label(image, detections)
 
-        assert result == ["standing", "standing"]
         assert len(result) == len(detections)
+        assert all(r.action == "standing" for r in result)
+        assert all(r.response == "standing" for r in result)
 
     def test_prompt_format_and_parse_called(self):
         """format_system, format_user, and parse are all invoked correctly."""
         detections = [_make_detection()]
-        parsed = BatchResponse(actions=[ActionItem(label="x")])
+        parsed = [ActionItem(action="x")]
         labeler, model, prompt = self._build_labeler(parsed_response=parsed)
         image = _make_image()
 

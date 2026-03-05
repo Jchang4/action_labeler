@@ -3,13 +3,14 @@ from pathlib import Path
 
 from PIL import Image
 from pydantic import BaseModel
+from tqdm import tqdm
 
 from ..dataset import Dataset
 from ..filters.base import BaseFilter
 from ..models.base import BaseModel as BaseVLM
 from ..preprocessors.base import BasePreprocessor
 from ..prompts import Prompt
-from ..types import Detection
+from ..types import ActionResponse, Detection, LabelResult
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
@@ -29,6 +30,9 @@ class ActionLabeler(ABC):
             Example: ``[[crop, resize]]`` produces 1 image.
             Example: ``[[crop], [mask], [bbox]]`` produces 3 images.
         filters: Filters that can reject entire images from processing.
+        save_every: If set, save the dataset every N images to ``save_path``.
+        save_path: File path for periodic saves. Required when ``save_every``
+            is set.
     """
 
     def __init__(
@@ -37,16 +41,29 @@ class ActionLabeler(ABC):
         prompt: Prompt,
         preprocessors: list[list[BasePreprocessor]] | None = None,
         filters: list[BaseFilter] | None = None,
+        save_every: int | None = None,
+        save_path: Path | None = None,
     ):
+        if save_every is not None and save_path is None:
+            raise ValueError("save_path is required when save_every is set")
         self.model = model
         self.prompt = prompt
         self.preprocessors = preprocessors or []
         self.filters = filters or []
+        self.save_every = save_every
+        self.save_path = save_path
+        if save_path is not None and save_path.exists():
+            self.dataset = Dataset.load(save_path)
+        else:
+            self.dataset = Dataset()
 
-    def run(
-        self, dataset_path: Path, dataset: Dataset | None = None
-    ) -> Dataset:
+    def run(self, dataset_path: Path) -> Dataset:
         """Orchestrate the labeling pipeline over a dataset directory.
+
+        Results are accumulated in ``self.dataset``, which can be inspected
+        at any time (e.g. after interrupting a Jupyter cell). Images that
+        are already fully labeled in the dataset are skipped automatically,
+        so calling ``run()`` again resumes where it left off.
 
         For each image:
         1. Load image + detection file
@@ -58,16 +75,13 @@ class ActionLabeler(ABC):
 
         Args:
             dataset_path: Path to the dataset directory.
-            dataset: Optional existing Dataset to resume from. Already-labeled
-                detections are skipped.
 
-        Returns a Dataset backed by a pandas DataFrame.
+        Returns the labeler's Dataset instance.
         """
-        if dataset is None:
-            dataset = Dataset()
         image_paths = self._load_images(dataset_path)
+        images_labeled = 0
 
-        for image_path in image_paths:
+        for image_path in tqdm(image_paths, desc="Labeling images"):
             try:
                 image = Image.open(image_path)
                 image = self.model.load_image(image)
@@ -82,30 +96,48 @@ class ActionLabeler(ABC):
 
                 # Skip fully-labeled images
                 if all(
-                    dataset.has_row(image_path, d) for d in detections
+                    self.dataset.has_row(image_path, d) for d in detections
                 ):
                     continue
 
-                responses = self.label(image, detections)
-                dataset.add_rows(image_path, detections, responses)
+                results = self.label(image, detections)
+                self.dataset.add_rows(image_path, detections, results)
+
+                images_labeled += 1
+                if (
+                    self.save_every is not None
+                    and images_labeled % self.save_every == 0
+                ):
+                    self.dataset.save(self.save_path)
             except Exception as e:
                 print(f"{image_path}: {e}")
 
-        return dataset
+        if self.save_path is not None:
+            self.dataset.save(self.save_path)
+
+        return self.dataset
 
     @abstractmethod
     def label(
         self, image: Image.Image, detections: list[Detection]
-    ) -> list[BaseModel | str]:
+    ) -> list[LabelResult]:
         """Subclasses define how detections map to model calls.
 
         Receives the raw image (not yet preprocessed) and all detections
         for that image. Responsible for calling preprocessors, model.predict(),
         and prompt.parse() as needed.
 
-        Returns one response per detection, positionally matched.
+        Returns one LabelResult per detection, positionally matched.
         """
         ...
+
+    def _make_result(self, response: ActionResponse | str) -> LabelResult:
+        """Wrap a parsed response into a LabelResult by extracting the action."""
+        if isinstance(response, str):
+            action = response
+        else:
+            action = response.action
+        return LabelResult(action=action, response=response)
 
     def _load_images(self, dataset_path: Path) -> list[Path]:
         """Glob for image files in dataset_path/images/."""

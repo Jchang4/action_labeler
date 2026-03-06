@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from action_labeler.dataset import Dataset, DatasetColumns
 from action_labeler.types import LabelResult
 from action_labeler.types import Detection
@@ -174,7 +176,17 @@ class TestBalance:
 
 
 class TestRemoveClass:
-    def test_removes_matching_rows(self):
+    def test_drops_whole_image_by_default(self):
+        """Default: drops the entire image if it has the target class."""
+        ds = _make_multi_detection_dataset([
+            ("a.jpg", [("walking", 0.1), ("sitting", 0.2)]),
+            ("b.jpg", [("sitting", 0.3)]),
+        ])
+        ds.remove_class("walking")
+        assert len(ds) == 1
+        assert ds.df[DatasetColumns.IMAGE_PATH].iloc[0] == Path("b.jpg")
+
+    def test_drops_all_images_with_class(self):
         ds = _make_dataset([
             ("a.jpg", "walking"),
             ("b.jpg", "sitting"),
@@ -192,35 +204,55 @@ class TestRemoveClass:
         ds.remove_class("running")
         assert len(ds) == 2
 
-
-class TestKeepClasses:
-    def test_keeps_only_specified(self):
-        ds = _make_dataset([
-            ("a.jpg", "walking"),
-            ("b.jpg", "sitting"),
-            ("c.jpg", "running"),
+    def test_keep_image_only_drops_detections(self):
+        """keep_image=True: only removes matching detections, keeps others."""
+        ds = _make_multi_detection_dataset([
+            ("a.jpg", [("walking", 0.1), ("sitting", 0.2)]),
+            ("b.jpg", [("sitting", 0.3)]),
         ])
-        ds.keep_classes(["walking", "running"])
+        ds.remove_class("walking", keep_image=True)
         assert len(ds) == 2
         actions = set(ds.df[DatasetColumns.ACTION])
-        assert actions == {"walking", "running"}
+        assert actions == {"sitting"}
+        images = set(ds.df[DatasetColumns.IMAGE_PATH])
+        assert images == {Path("a.jpg"), Path("b.jpg")}
 
-    def test_removes_unspecified(self):
+    def test_keep_image_removes_image_if_only_class(self):
+        """keep_image=True: image with only the target class is fully removed."""
         ds = _make_dataset([
             ("a.jpg", "walking"),
             ("b.jpg", "sitting"),
         ])
-        ds.keep_classes(["running"])
-        assert len(ds) == 0
-
-
-class TestRemoveImage:
-    def test_removes_all_rows_for_image(self):
-        ds = _make_dataset([
-            ("a.jpg", "walking"),
-            ("a.jpg", "sitting"),
-            ("b.jpg", "running"),
-        ])
-        ds.remove_image(Path("a.jpg"))
+        ds.remove_class("walking", keep_image=True)
         assert len(ds) == 1
         assert ds.df[DatasetColumns.IMAGE_PATH].iloc[0] == Path("b.jpg")
+
+
+class TestRenameClass:
+    def test_renames_matching_rows(self):
+        ds = _make_dataset([
+            ("a.jpg", "walking"),
+            ("b.jpg", "sitting"),
+            ("c.jpg", "walking"),
+        ])
+        ds.rename_class("walking", "strolling")
+        actions = ds.df[DatasetColumns.ACTION].tolist()
+        assert actions == ["strolling", "sitting", "strolling"]
+
+    def test_raises_if_same_name(self):
+        ds = _make_dataset([("a.jpg", "walking")])
+        with pytest.raises(ValueError, match="old_name and new_name are both"):
+            ds.rename_class("walking", "walking")
+
+    def test_raises_if_old_name_missing(self):
+        ds = _make_dataset([("a.jpg", "walking")])
+        with pytest.raises(ValueError, match="not found in dataset"):
+            ds.rename_class("running", "jogging")
+
+    def test_preserves_row_count(self):
+        ds = _make_dataset([
+            ("a.jpg", "walking"),
+            ("b.jpg", "sitting"),
+        ])
+        ds.rename_class("walking", "strolling")
+        assert len(ds) == 2

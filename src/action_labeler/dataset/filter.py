@@ -88,17 +88,31 @@ class DatasetFilterMixin:
 
         self.df = self.df[self.df[col_image].isin(kept_images)].reset_index(drop=True)
 
-    def remove_class(self, class_name: str) -> None:
-        """Remove rows where action == class_name."""
-        col = DatasetColumns.ACTION
-        self.df = self.df[self.df[col] != class_name].reset_index(drop=True)
+    def remove_class(self, class_name: str, keep_image: bool = False) -> None:
+        """Remove all images that contain a detection with action == class_name.
 
-    def keep_classes(self, class_names: list[str]) -> None:
-        """Keep only rows where action is in class_names."""
-        col = DatasetColumns.ACTION
-        self.df = self.df[self.df[col].isin(class_names)].reset_index(drop=True)
+        Args:
+            class_name: The action class to remove.
+            keep_image: If True, only drop the matching detections instead of
+                the entire image. Other detections in the same image are kept.
+        """
+        col_action = DatasetColumns.ACTION
+        col_image = DatasetColumns.IMAGE_PATH
+        if keep_image:
+            self.df = self.df[self.df[col_action] != class_name].reset_index(drop=True)
+        else:
+            images_to_drop = set(
+                self.df.loc[self.df[col_action] == class_name, col_image]
+            )
+            self.df = self.df[~self.df[col_image].isin(images_to_drop)].reset_index(
+                drop=True
+            )
 
-    def remove_image(self, image_path: Path) -> None:
-        """Remove all rows for a given image path."""
-        col = DatasetColumns.IMAGE_PATH
-        self.df = self.df[self.df[col] != image_path].reset_index(drop=True)
+    def rename_class(self, old_name: str, new_name: str) -> None:
+        """Rename an action class in-place."""
+        if old_name == new_name:
+            raise ValueError(f"old_name and new_name are both '{old_name}'")
+        col = DatasetColumns.ACTION
+        if old_name not in self.df[col].values:
+            raise ValueError(f"Class '{old_name}' not found in dataset")
+        self.df[col] = self.df[col].replace(old_name, new_name)

@@ -84,11 +84,12 @@ class TestLoadImages:
 class TestLoadDetections:
     def test_parses_yolo_format(self, tmp_path):
         det_file = tmp_path / "detect" / "img.txt"
+        seg_file = tmp_path / "segments" / "img.txt"
         _write_detections(det_file, ["0 0.5 0.5 0.3 0.4"])
         image = _make_image()
 
         labeler = _make_labeler()
-        dets = labeler._load_detections(det_file, image)
+        dets = labeler._load_detections(det_file, seg_file, image)
         assert len(dets) == 1
         assert dets[0] == Detection(
             class_id=0, x_center=0.5, y_center=0.5, width=0.3, height=0.4,
@@ -97,6 +98,7 @@ class TestLoadDetections:
 
     def test_multiple_detections(self, tmp_path):
         det_file = tmp_path / "detect" / "img.txt"
+        seg_file = tmp_path / "segments" / "img.txt"
         _write_detections(det_file, [
             "0 0.5 0.5 0.3 0.4",
             "1 0.2 0.8 0.1 0.2",
@@ -104,13 +106,14 @@ class TestLoadDetections:
         image = _make_image()
 
         labeler = _make_labeler()
-        dets = labeler._load_detections(det_file, image)
+        dets = labeler._load_detections(det_file, seg_file, image)
         assert len(dets) == 2
         assert dets[1].class_id == 1
 
     def test_missing_file_returns_empty(self, tmp_path):
         labeler = _make_labeler()
-        dets = labeler._load_detections(tmp_path / "nonexistent.txt", _make_image())
+        seg_file = tmp_path / "segments" / "nonexistent.txt"
+        dets = labeler._load_detections(tmp_path / "nonexistent.txt", seg_file, _make_image())
         assert dets == []
 
 

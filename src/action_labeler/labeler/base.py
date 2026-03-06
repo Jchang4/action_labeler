@@ -89,7 +89,12 @@ class ActionLabeler(ABC):
                 detection_path = (
                     dataset_path / "detect" / f"{image_path.stem}.txt"
                 )
-                detections = self._load_detections(detection_path, image)
+                segment_path = (
+                    dataset_path / "segments" / f"{image_path.stem}.txt"
+                )
+                detections = self._load_detections(
+                    detection_path, segment_path, image
+                )
 
                 if not self._apply_filters(image, detections):
                     continue
@@ -150,9 +155,16 @@ class ActionLabeler(ABC):
         return paths
 
     def _load_detections(
-        self, detection_path: Path, image: Image.Image
+        self, detection_path: Path, segment_path: Path, image: Image.Image
     ) -> list[Detection]:
-        """Parse a YOLO-format detection txt file into Detection objects."""
+        """Load detections, attaching segment data when available.
+
+        If a segment file exists, detections are loaded from it (which
+        includes both polygon data and a derived bounding box). Otherwise,
+        detections are loaded from the standard bounding-box file.
+        """
+        if segment_path.exists():
+            return Detection.load_segments_txt(segment_path, image)
         return Detection.load_txt(detection_path, image)
 
     def _apply_filters(

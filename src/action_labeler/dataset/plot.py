@@ -86,6 +86,23 @@ class DatasetPlotMixin:
         plt.tight_layout()
         plt.show()
 
+    def detection_stats(self) -> pd.DataFrame:
+        """Return average detection size statistics grouped by action.
+
+        Returns a DataFrame with columns: avg_width, avg_height, avg_area, count.
+        Area is width * height (fraction of image area in normalized space).
+        Sorted by avg_area descending.
+        """
+        col = DatasetColumns
+
+        stats = self.df.groupby(col.ACTION)[col.DETECTION].agg(
+            avg_width=lambda dets: dets.apply(lambda d: d.width).mean(),
+            avg_height=lambda dets: dets.apply(lambda d: d.height).mean(),
+            avg_area=lambda dets: dets.apply(lambda d: d.width * d.height).mean(),
+            count="count",
+        )
+        return stats.sort_values("avg_area", ascending=False)
+
     def plot_distribution(self) -> None:
         """Bar chart of action class counts."""
         if len(self.df) == 0:

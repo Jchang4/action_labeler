@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -96,3 +97,60 @@ class TestPlotDistribution:
         ds.plot_distribution()
         mock_plt.show.assert_not_called()
         assert "No rows" in capsys.readouterr().out
+
+
+class TestDetectionStats:
+    def test_returns_correct_columns(self, tmp_path):
+        ds = _make_dataset_with_images(tmp_path, [("a.jpg", "walking")])
+        result = ds.detection_stats()
+        assert list(result.columns) == ["avg_width", "avg_height", "avg_area", "count"]
+
+    def test_computes_averages(self):
+        ds = Dataset()
+        det1 = _make_detection(width=0.2, height=0.4)
+        det2 = _make_detection(width=0.4, height=0.6, x_center=0.3)
+        ds.add_rows(
+            Path("a.jpg"),
+            [det1, det2],
+            [_result("walking"), _result("walking")],
+        )
+        result = ds.detection_stats()
+        row = result.loc["walking"]
+        assert abs(row["avg_width"] - 0.3) < 1e-6
+        assert abs(row["avg_height"] - 0.5) < 1e-6
+        assert abs(row["avg_area"] - (0.2 * 0.4 + 0.4 * 0.6) / 2) < 1e-6
+        assert row["count"] == 2
+
+    def test_sorted_by_area_descending(self):
+        ds = Dataset()
+        # small detections
+        ds.add_rows(
+            Path("a.jpg"),
+            [_make_detection(width=0.1, height=0.1)],
+            [_result("small")],
+        )
+        # large detections
+        ds.add_rows(
+            Path("b.jpg"),
+            [_make_detection(width=0.8, height=0.8)],
+            [_result("large")],
+        )
+        result = ds.detection_stats()
+        assert result.index[0] == "large"
+        assert result.index[1] == "small"
+
+    def test_multiple_actions(self):
+        ds = Dataset()
+        ds.add_rows(
+            Path("a.jpg"),
+            [_make_detection(width=0.3, height=0.4)],
+            [_result("walking")],
+        )
+        ds.add_rows(
+            Path("b.jpg"),
+            [_make_detection(width=0.5, height=0.6)],
+            [_result("sitting")],
+        )
+        result = ds.detection_stats()
+        assert len(result) == 2
+        assert set(result.index) == {"walking", "sitting"}

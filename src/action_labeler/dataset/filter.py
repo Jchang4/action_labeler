@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -109,10 +110,27 @@ class DatasetFilterMixin:
             )
 
     def rename_class(self, old_name: str, new_name: str) -> None:
-        """Rename an action class in-place."""
+        """Rename an action class in-place. No-op if old_name is not present."""
         if old_name == new_name:
             raise ValueError(f"old_name and new_name are both '{old_name}'")
         col = DatasetColumns.ACTION
-        if old_name not in self.df[col].values:
-            raise ValueError(f"Class '{old_name}' not found in dataset")
         self.df[col] = self.df[col].replace(old_name, new_name)
+
+    def scale_bboxes(self, scales: dict[str, tuple[float, float]]) -> None:
+        """Scale bounding box dimensions for specific action classes.
+
+        Args:
+            scales: Maps action name to (width_scale, height_scale).
+                    1.0 = no change, 1.5 = 150% width/height, 0.5 = 50%.
+        """
+        col = DatasetColumns
+
+        for action, (w_scale, h_scale) in scales.items():
+            mask = self.df[col.ACTION] == action
+            self.df.loc[mask, col.DETECTION] = self.df.loc[mask, col.DETECTION].apply(
+                lambda det: replace(
+                    det,
+                    width=min(det.width * w_scale, 1.0),
+                    height=min(det.height * h_scale, 1.0),
+                )
+            )

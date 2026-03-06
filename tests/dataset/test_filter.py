@@ -244,10 +244,10 @@ class TestRenameClass:
         with pytest.raises(ValueError, match="old_name and new_name are both"):
             ds.rename_class("walking", "walking")
 
-    def test_raises_if_old_name_missing(self):
+    def test_noop_if_old_name_missing(self):
         ds = _make_dataset([("a.jpg", "walking")])
-        with pytest.raises(ValueError, match="not found in dataset"):
-            ds.rename_class("running", "jogging")
+        ds.rename_class("running", "jogging")
+        assert ds.df[DatasetColumns.ACTION].iloc[0] == "walking"
 
     def test_preserves_row_count(self):
         ds = _make_dataset([
@@ -256,3 +256,53 @@ class TestRenameClass:
         ])
         ds.rename_class("walking", "strolling")
         assert len(ds) == 2
+
+
+class TestScaleBboxes:
+    def test_scales_matching_class(self):
+        ds = _make_dataset([("a.jpg", "cycling"), ("b.jpg", "sitting")])
+        original_w = ds.df[DatasetColumns.DETECTION].iloc[0].width
+        original_h = ds.df[DatasetColumns.DETECTION].iloc[0].height
+        ds.scale_bboxes({"cycling": (1.4, 1.2)})
+        det = ds.df[DatasetColumns.DETECTION].iloc[0]
+        assert abs(det.width - original_w * 1.4) < 1e-6
+        assert abs(det.height - original_h * 1.2) < 1e-6
+
+    def test_does_not_scale_other_classes(self):
+        ds = _make_dataset([("a.jpg", "cycling"), ("b.jpg", "sitting")])
+        original = ds.df[DatasetColumns.DETECTION].iloc[1]
+        ds.scale_bboxes({"cycling": (1.4, 1.2)})
+        unchanged = ds.df[DatasetColumns.DETECTION].iloc[1]
+        assert unchanged.width == original.width
+        assert unchanged.height == original.height
+
+    def test_clamps_to_one(self):
+        """Width/height should not exceed 1.0 in normalized space."""
+        ds = Dataset()
+        det = _make_detection(width=0.8, height=0.9)
+        ds.add_rows(Path("a.jpg"), [det], [LabelResult(action="cycling", response="cycling")])
+        ds.scale_bboxes({"cycling": (2.0, 2.0)})
+        scaled = ds.df[DatasetColumns.DETECTION].iloc[0]
+        assert scaled.width == 1.0
+        assert scaled.height == 1.0
+
+    def test_shrink(self):
+        ds = _make_dataset([("a.jpg", "walking")])
+        original_w = ds.df[DatasetColumns.DETECTION].iloc[0].width
+        ds.scale_bboxes({"walking": (0.5, 1.0)})
+        det = ds.df[DatasetColumns.DETECTION].iloc[0]
+        assert abs(det.width - original_w * 0.5) < 1e-6
+
+    def test_no_matching_class_noop(self):
+        ds = _make_dataset([("a.jpg", "sitting")])
+        original = ds.df[DatasetColumns.DETECTION].iloc[0]
+        ds.scale_bboxes({"cycling": (1.5, 1.5)})
+        assert ds.df[DatasetColumns.DETECTION].iloc[0] == original
+
+    def test_preserves_center(self):
+        ds = _make_dataset([("a.jpg", "cycling")])
+        original = ds.df[DatasetColumns.DETECTION].iloc[0]
+        ds.scale_bboxes({"cycling": (1.4, 1.2)})
+        scaled = ds.df[DatasetColumns.DETECTION].iloc[0]
+        assert scaled.x_center == original.x_center
+        assert scaled.y_center == original.y_center

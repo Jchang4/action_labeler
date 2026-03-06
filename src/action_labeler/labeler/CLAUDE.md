@@ -27,12 +27,12 @@ Subclasses only implement `label()`. Everything else (file I/O, filtering, resum
 ## The `label()` Contract
 
 ```python
-def label(self, image: Image.Image, detections: list[Detection]) -> list[BaseModel | str]:
+def label(self, image: Image.Image, detections: list[Detection]) -> list[LabelResult]:
 ```
 
 - **Input**: the raw image (not preprocessed) and all detections for that image
-- **Output**: exactly one response per detection, positionally matched
-- **Responsibilities**: call `_apply_preprocessors()`, `model.predict()`, and `prompt.parse()` as needed
+- **Output**: exactly one `LabelResult` per detection, positionally matched
+- **Responsibilities**: call `_apply_preprocessors()`, `model.predict()`, `prompt.parse()`, and `_make_result()` as needed
 
 ## Preprocessors
 
@@ -101,8 +101,9 @@ MultiViewLabeler(
    - `self.prompt.format_system()` → system prompt string
    - `self.prompt.format_user()` → user prompt string
    - `self.model.predict(system, user, images)` → raw text response
-   - `self.prompt.parse(text)` → `BaseModel | str`
-4. Return exactly one response per detection
+   - `self.prompt.parse(text)` → `ActionResponse | str`
+   - `self._make_result(response)` → `LabelResult` (extracts action from response)
+4. Return exactly one `LabelResult` per detection
 5. Add the class to `__init__.py`
 6. Add tests in `tests/labeler/test_your_labeler.py`
 
@@ -110,37 +111,41 @@ MultiViewLabeler(
 
 ```python
 from PIL import Image
-from pydantic import BaseModel
 
 from .base import ActionLabeler
-from ..types import Detection
+from ..types import Detection, LabelResult
 
 
 class MyLabeler(ActionLabeler):
     def label(
         self, image: Image.Image, detections: list[Detection]
-    ) -> list[BaseModel | str]:
+    ) -> list[LabelResult]:
         images = self._apply_preprocessors(image, detections)
         system = self.prompt.format_system()
         user = self.prompt.format_user()
         text = self.model.predict(system, user, images)
-        return [self.prompt.parse(text)] * len(detections)
+        response = self.prompt.parse(text)
+        return [self._make_result(response)] * len(detections)
 ```
 
-## Resume Support
+## Auto-Save and Resume
 
-`run()` accepts an optional `dataset` argument. When provided:
-- Fully-labeled images are skipped (all detections already in dataset)
-- Partially-labeled images are re-labeled (all detections sent to `label()`, `add_rows()` deduplicates keeping the latest responses)
+The base class supports periodic checkpointing via `save_every` and `save_path` constructor args:
 
 ```python
-dataset = labeler.run(dataset_path)
-dataset.save(Path("checkpoint.pkl"))
-
-# Later, resume:
-dataset = Dataset.load(Path("checkpoint.pkl"))
-dataset = labeler.run(dataset_path, dataset=dataset)
+labeler = SingleDetectionLabeler(
+    model=model,
+    prompt=prompt,
+    save_every=50,              # save every 50 images
+    save_path=Path("results.pkl"),  # required when save_every is set
+)
 ```
+
+- If `save_path` exists at construction time, the dataset is loaded automatically (resume)
+- During `run()`, the dataset is saved every `save_every` images and once at the end
+- The dataset is stored on `self.dataset` and can be inspected at any time (e.g. after interrupting a Jupyter cell)
+- Fully-labeled images are skipped automatically, so calling `run()` again resumes where it left off
+- Partially-labeled images are re-labeled; `add_rows()` deduplicates keeping the latest responses
 
 ## Tests
 

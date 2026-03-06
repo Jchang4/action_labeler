@@ -29,32 +29,35 @@ Examples: `../datasets/human/sitting/`
 
 ```
 src/action_labeler/
-  types.py              # Detection dataclass (YOLO-format with pixel-space properties)
+  types.py              # Detection, LabelResult, ActionResponse dataclasses/models
   models/               # VLM integrations (base interface + llama.cpp)
   preprocessors/        # Image transforms before VLM inference (bounding_box, resize)
   filters/              # Reject detections/images (aspect_ratio, detection_count, overlap)
   prompts/              # Prompt template with system/user messages and response parsing
   labeler/              # Orchestration layer (abstract base + 3 strategies)
-    base.py             # ActionLabeler — shared run() loop, filtering, resume
+    base.py             # ActionLabeler — shared run() loop, filtering, resume, auto-save
     all_at_once.py      # One VLM call per image, all detections at once
     single_detection.py # One VLM call per detection
     multi_view.py       # One VLM call per detection, multiple preprocessed views
   dataset/              # Output container (pandas DataFrame wrapper)
     columns.py          # Column name constants (single source of truth)
-    dataset.py          # Dataset class — construction, save/load, add_rows, has_row
-    filter.py           # DatasetFilterMixin — in-place row filtering
-    plot.py             # DatasetPlotMixin — stub, not yet implemented
+    dataset.py          # Dataset class — construction, save/load, add_rows, has_row, combine
+    filter.py           # DatasetFilterMixin — balance, remove_class, rename_class
+    plot.py             # DatasetPlotMixin — plot_grid, plot_distribution
+    export.py           # DatasetExportMixin — export_yolov8 with stratified split
 ```
 
 ## Core Components
 
-- **Detection** (`types.py`): Dataclass for a single YOLO-format detection with normalized coordinates and pixel-space properties (x1, y1, x2, y2, xyxy)
+- **Detection** (`types.py`): Dataclass for a single YOLO-format detection with normalized coordinates and pixel-space properties (x1, y1, x2, y2, xyxy). Has `from_yolo()` and `load_txt()` class methods
+- **ActionResponse** (`types.py`): Base Pydantic model for VLM responses. All prompt response models should inherit from this to ensure `action` field is present
+- **LabelResult** (`types.py`): Pairs the extracted action string with the full VLM response. Returned by `label()` methods
 - **Model** (`models/`): VLM integration — `predict(system, user, images)` returns raw text. Currently: `LlamaCppModel`
 - **Preprocessors** (`preprocessors/`): Transform images before VLM inference. Configured as chains: `list[list[BasePreprocessor]]` where each inner list produces one image
 - **Filters** (`filters/`): Accept/reject an image and its detections. Return `True` to keep, `False` to skip
 - **Prompt** (`prompts/`): Template with `format_system()`, `format_user()`, and `parse(text)` for response parsing (supports Pydantic response models)
-- **ActionLabeler** (`labeler/`): Abstract base with shared `run()` loop. Subclasses implement `label()` to define how detections map to VLM calls
-- **Dataset** (`dataset/`): Output container wrapping a pandas DataFrame. One row per (image, detection) pair. Supports save/load (pickle), filtering, and resume
+- **ActionLabeler** (`labeler/`): Abstract base with shared `run()` loop. Subclasses implement `label()` returning `list[LabelResult]`. Supports `save_every`/`save_path` for periodic checkpointing and auto-resume from existing save files
+- **Dataset** (`dataset/`): Output container wrapping a pandas DataFrame. One row per (image, detection) pair. Supports save/load (pickle), combine, filtering (balance, remove_class, rename_class), plotting (plot_grid, plot_distribution), and export (export_yolov8)
 
 ## Usage Pattern
 
@@ -64,14 +67,27 @@ labeler = SingleDetectionLabeler(
     prompt=Prompt(system="...", user="...", response_model=MyAction),
     preprocessors=[[crop, resize]],
     filters=[AspectRatioFilter(min_ratio=0.3)],
+    save_every=50,
+    save_path=Path("results.pkl"),
 )
 
+# Auto-resumes if save_path exists; saves every 50 images + at the end
 dataset = labeler.run(dataset_path)
-dataset.save(Path("results.pkl"))
 
-# Resume from checkpoint
-dataset = Dataset.load(Path("results.pkl"))
-dataset = labeler.run(dataset_path, dataset=dataset)
+# Post-processing
+dataset.remove_class("unknown")
+dataset.rename_class("old_name", "new_name")
+dataset.balance(seed=42)
+
+# Combine multiple datasets
+combined = Dataset.combine(dataset1, dataset2)
+
+# Export to YOLOv8 format
+combined.export_yolov8(Path("yolo_dataset"), val_ratio=0.2, seed=42)
+
+# Visualization
+dataset.plot_distribution()
+dataset.plot_grid(n=16, action="walking")
 ```
 
 ## Commands

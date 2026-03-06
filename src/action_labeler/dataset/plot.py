@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 
+from matplotlib import colormaps as mpl_colormaps
 import matplotlib.pyplot as plt
 import pandas as pd
 from PIL import Image, ImageDraw
@@ -37,6 +38,17 @@ class DatasetPlotMixin:
 
         sample = df.sample(n=min(n, len(df)), random_state=seed)
 
+        # Build a consistent color map: each action gets a unique color
+        unique_actions = sorted(self.df[DatasetColumns.ACTION].unique())
+        cmap = mpl_colormaps["tab10"]
+        color_map = {
+            act: tuple(int(c * 255) for c in cmap(i % cmap.N)[:3])
+            for i, act in enumerate(unique_actions)
+        }
+
+        # Group all rows by image so we can draw every detection per image
+        all_by_image = self.df.groupby(DatasetColumns.IMAGE_PATH)
+
         cols = math.ceil(math.sqrt(len(sample)))
         rows = math.ceil(len(sample) / cols)
         fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
@@ -48,13 +60,20 @@ class DatasetPlotMixin:
 
         for ax, (_, row) in zip(axes, sample.iterrows()):
             image_path = row[DatasetColumns.IMAGE_PATH]
-            detection = row[DatasetColumns.DETECTION]
             action_label = row[DatasetColumns.ACTION]
 
             img = Image.open(image_path).convert("RGB")
             draw = ImageDraw.Draw(img)
-            draw.rectangle(detection.xyxy, outline="red", width=2)
-            draw.text((detection.x1, max(0, detection.y1 - 12)), action_label, fill="red")
+
+            # Draw ALL detections for this image
+            for _, sibling in all_by_image.get_group(image_path).iterrows():
+                det = sibling[DatasetColumns.DETECTION]
+                act = sibling[DatasetColumns.ACTION]
+                color = color_map.get(act, (255, 0, 0))
+                draw.rectangle(det.xyxy, outline=color, width=2)
+                draw.text(
+                    (det.x1, max(0, det.y1 - 12)), act, fill=color
+                )
 
             ax.imshow(img)
             ax.set_title(action_label, fontsize=10)

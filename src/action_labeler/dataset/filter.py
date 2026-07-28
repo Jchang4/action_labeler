@@ -117,7 +117,12 @@ class DatasetFilterMixin:
         self.df[col] = self.df[col].replace(old_name, new_name)
 
     def scale_bboxes(self, scales: dict[str, tuple[float, float]]) -> None:
-        """Scale bounding box dimensions for specific action classes.
+        """Scale bounding boxes for specific action classes and clip to the image.
+
+        Scaling is applied symmetrically around the original box center. If an
+        expanded edge crosses the normalized image boundary, the rectangle is
+        intersected with ``[0, 1]`` and converted back to ``xywh``. Therefore,
+        clipping at an image edge can shift the resulting box center.
 
         Args:
             scales: Maps action name to (width_scale, height_scale).
@@ -127,10 +132,24 @@ class DatasetFilterMixin:
 
         for action, (w_scale, h_scale) in scales.items():
             mask = self.df[col.ACTION] == action
-            self.df.loc[mask, col.DETECTION] = self.df.loc[mask, col.DETECTION].apply(
-                lambda det: replace(
+
+            def scale_and_clip(det):
+                half_width = det.width * w_scale / 2
+                half_height = det.height * h_scale / 2
+
+                x1 = max(0.0, det.x_center - half_width)
+                y1 = max(0.0, det.y_center - half_height)
+                x2 = min(1.0, det.x_center + half_width)
+                y2 = min(1.0, det.y_center + half_height)
+
+                return replace(
                     det,
-                    width=min(det.width * w_scale, 1.0),
-                    height=min(det.height * h_scale, 1.0),
+                    x_center=(x1 + x2) / 2,
+                    y_center=(y1 + y2) / 2,
+                    width=x2 - x1,
+                    height=y2 - y1,
                 )
+
+            self.df.loc[mask, col.DETECTION] = self.df.loc[mask, col.DETECTION].apply(
+                scale_and_clip
             )

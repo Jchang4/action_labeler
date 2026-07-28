@@ -276,8 +276,8 @@ class TestScaleBboxes:
         assert unchanged.width == original.width
         assert unchanged.height == original.height
 
-    def test_clamps_to_one(self):
-        """Width/height should not exceed 1.0 in normalized space."""
+    def test_clips_to_image(self):
+        """A centered expansion should be clipped to the full image."""
         ds = Dataset()
         det = _make_detection(width=0.8, height=0.9)
         ds.add_rows(Path("a.jpg"), [det], [LabelResult(action="cycling", response="cycling")])
@@ -285,6 +285,46 @@ class TestScaleBboxes:
         scaled = ds.df[DatasetColumns.DETECTION].iloc[0]
         assert scaled.width == 1.0
         assert scaled.height == 1.0
+
+    def test_clips_and_recenters_at_image_boundary(self):
+        ds = Dataset()
+        det = _make_detection(
+            x_center=0.8,
+            y_center=0.85,
+            width=0.4,
+            height=0.4,
+        )
+        ds.add_rows(Path("a.jpg"), [det], [LabelResult(action="cycling", response="cycling")])
+
+        ds.scale_bboxes({"cycling": (1.3, 1.3)})
+
+        scaled = ds.df[DatasetColumns.DETECTION].iloc[0]
+        assert scaled.x_center == pytest.approx(0.77)
+        assert scaled.y_center == pytest.approx(0.795)
+        assert scaled.width == pytest.approx(0.46)
+        assert scaled.height == pytest.approx(0.41)
+
+    @pytest.mark.parametrize(
+        ("x_center", "y_center"),
+        [(0.1, 0.1), (0.9, 0.9)],
+    )
+    def test_scaled_corners_remain_inside_image(self, x_center, y_center):
+        ds = Dataset()
+        det = _make_detection(
+            x_center=x_center,
+            y_center=y_center,
+            width=0.3,
+            height=0.4,
+        )
+        ds.add_rows(Path("a.jpg"), [det], [LabelResult(action="cycling", response="cycling")])
+
+        ds.scale_bboxes({"cycling": (1.3, 1.3)})
+
+        scaled = ds.df[DatasetColumns.DETECTION].iloc[0]
+        assert scaled.x_center - scaled.width / 2 >= 0.0
+        assert scaled.y_center - scaled.height / 2 >= 0.0
+        assert scaled.x_center + scaled.width / 2 <= 1.0
+        assert scaled.y_center + scaled.height / 2 <= 1.0
 
     def test_shrink(self):
         ds = _make_dataset([("a.jpg", "walking")])
